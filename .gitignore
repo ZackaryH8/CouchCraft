@@ -1,0 +1,22 @@
+# Tauri / Rust
+tauri-app/src-tauri/target/
+tauri-app/src-tauri/gen/
+
+# Node
+tauri-app/node_modules/
+tauri-app/dist/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
