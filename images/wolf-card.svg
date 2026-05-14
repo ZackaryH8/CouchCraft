@@ -9,7 +9,7 @@
       <stop offset="100%" stop-color="#bef264" stop-opacity="0"/>
     </radialGradient>
     <clipPath id="card-clip">
-      <rect width="600" height="800" rx="20"/>
+      <rect width="600" height="800"/>
     </clipPath>
   </defs>
 
@@ -79,7 +79,7 @@
       font-size="15"
       letter-spacing="5"
       fill="#4a6638"
-    >MINECRAFT LAUNCHER</text>
+    >LAUNCHER</text>
 
     <!-- Minecraft-style ground band -->
     <!-- Grass top -->
