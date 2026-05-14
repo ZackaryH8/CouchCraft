@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0f1410"/>
+      <stop offset="100%" stop-color="#060807"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="860" height="200" fill="url(#bg)"/>
+
+  <!-- Couch icon, scaled to fit ~110x70 centered at y=100 -->
+  <!-- Back cushion -->
+  <rect x="24" y="58" width="112" height="45" rx="11" fill="#bef264"/>
+  <!-- Seat -->
+  <rect x="36" y="83" width="88" height="29" rx="6" fill="#9dc83c"/>
+  <!-- Cushion divider -->
+  <line x1="80" y1="86" x2="80" y2="108" stroke="#7aaa28" stroke-width="2" stroke-linecap="round"/>
+  <!-- Left arm -->
+  <rect x="24" y="67" width="25" height="55" rx="9" fill="#bef264"/>
+  <!-- Right arm -->
+  <rect x="111" y="67" width="25" height="55" rx="9" fill="#bef264"/>
+  <!-- Legs -->
+  <rect x="44" y="117" width="8" height="18" rx="3" fill="#bef264" opacity="0.4"/>
+  <rect x="108" y="117" width="8" height="18" rx="3" fill="#bef264" opacity="0.4"/>
+
+  <!-- Wordmark -->
+  <text
+    x="170" y="138"
+    font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
+    font-weight="900"
+    font-size="88"
+    letter-spacing="-3"
+  >
+    <tspan fill="#ffffff">COUCH</tspan><tspan fill="#bef264">CRAFT</tspan>
+  </text>
+
+  <!-- Tagline -->
+  <text
+    x="172" y="166"
+    font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
+    font-weight="500"
+    font-size="18"
+    letter-spacing="6"
+    fill="#4a5c3a"
+  >MINECRAFT LAUNCHER FOR THE COUCH</text>
+</svg>
