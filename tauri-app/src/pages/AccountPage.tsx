@@ -185,7 +185,7 @@ export function AccountPage({
     ];
 
     return (
-      <section className="grid min-h-0 flex-1 grid-cols-[18rem_1fr] gap-6">
+      <section className="grid min-h-0 flex-1 grid-cols-[26rem_1fr] gap-6">
         {/* Account card */}
         <div className="simple-panel flex flex-col rounded-[2rem] px-6 py-7">
           <p className="text-xs font-semibold uppercase tracking-[0.35em] text-stone-500">
@@ -193,7 +193,7 @@ export function AccountPage({
           </p>
           <div className="mt-5 flex items-center gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-[1.25rem] bg-lime-300/10 text-2xl font-bold text-lime-300">
-              {account.mcUsername.slice(0, 2).toUpperCase()}
+              <img src={`https://api.mineatar.io/face/${account.mcUuid}`} alt="Avatar" className="h-full w-full rounded-[1.25rem]" />
             </div>
             <div>
               <p className="text-2xl font-semibold text-white">{account.mcUsername}</p>
