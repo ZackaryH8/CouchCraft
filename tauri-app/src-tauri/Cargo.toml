@@ -1,8 +1,8 @@
 [package]
-name = "tauri-app"
+name = "couchcraft"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "A 10-foot Minecraft launcher built for the couch"
+authors = ["Zack Eckersley Pallett"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -25,4 +25,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-gamepad = "0.0.5"
 gilrs = "0.11.1"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+fastnbt = "2"
+flate2 = "1"
+sha1 = { version = "0.10", features = ["std"] }
+futures = "0.3"
+zip = "2"
+tar = "0.4"
+tokio = { version = "1", features = ["sync"] }
