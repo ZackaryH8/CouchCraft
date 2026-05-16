@@ -1,5 +1,7 @@
 # CouchCraft
 
+![CouchCraft](images/main.png)
+
 A Minecraft launcher designed to run on a TV via a gamepad. No keyboard or mouse required.
 
 It runs as a [Wolf](https://github.com/games-on-whales/wolf) / [Games on Whales](https://github.com/games-on-whales/gow) Docker container, streamed to any Moonlight-compatible client.
