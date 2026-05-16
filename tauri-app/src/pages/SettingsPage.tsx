@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, type MutableRefObject } from 
 import type { SettingsItem, SettingsSection } from "../types";
 import { UI_SOUND_VOLUME_STEP } from "../constants";
 import type { GamepadInput } from "../hooks/useGamepad";
+import type { ControllerType } from "../gamepad/glyphs";
 
 type SettingsFocus = "sections" | "items";
 type SettingsOverlay = "none" | "toggle" | "slider";
@@ -13,7 +14,15 @@ interface UseSettingsPageOptions {
   toSidebar: () => void;
   uiSoundsEnabled: boolean;
   uiSoundVolume: number;
+  controllerLayout: ControllerType;
+  motionReduced: boolean;
+  vibrationEnabled: boolean;
+  isFullscreen: boolean;
   toggleSounds: () => void;
+  toggleControllerLayout: () => void;
+  toggleMotionReduced: () => void;
+  toggleVibration: () => void;
+  toggleFullscreen: () => void;
   setVolume: (v: number) => void;
 }
 
@@ -22,7 +31,15 @@ export function useSettingsPage({
   toSidebar,
   uiSoundsEnabled,
   uiSoundVolume,
+  controllerLayout,
+  motionReduced,
+  vibrationEnabled,
+  isFullscreen,
   toggleSounds,
+  toggleControllerLayout,
+  toggleMotionReduced,
+  toggleVibration,
+  toggleFullscreen,
   setVolume,
 }: UseSettingsPageOptions) {
   const sectionRefs = useRef<Array<HTMLElement | null>>([]);
@@ -49,14 +66,20 @@ export function useSettingsPage({
   const openOverlay = useCallback(
     (item: SettingsItem) => {
       if (item.editType === "toggle") {
-        setDraftToggle(uiSoundsEnabled);
+        let initialTrue: boolean;
+        if (item.label === "Primary Layout") initialTrue = controllerLayout === "xbox";
+        else if (item.label === "Motion") initialTrue = !motionReduced;
+        else if (item.label === "Vibration") initialTrue = vibrationEnabled;
+        else if (item.label === "Fullscreen") initialTrue = isFullscreen;
+        else initialTrue = uiSoundsEnabled;
+        setDraftToggle(initialTrue);
         setOverlay("toggle");
       } else if (item.editType === "slider") {
         setDraftVolume(uiSoundVolume);
         setOverlay("slider");
       }
     },
-    [uiSoundsEnabled, uiSoundVolume],
+    [uiSoundsEnabled, uiSoundVolume, controllerLayout, motionReduced, vibrationEnabled, isFullscreen],
   );
 
   const handleInput = useCallback(
@@ -71,7 +94,17 @@ export function useSettingsPage({
             setDraftToggle(false);
             break;
           case "A":
-            if (draftToggle !== uiSoundsEnabled) toggleSounds();
+            if (selectedItem?.label === "Primary Layout") {
+              if (draftToggle !== (controllerLayout === "xbox")) toggleControllerLayout();
+            } else if (selectedItem?.label === "Motion") {
+              if (draftToggle !== !motionReduced) toggleMotionReduced();
+            } else if (selectedItem?.label === "Vibration") {
+              if (draftToggle !== vibrationEnabled) toggleVibration();
+            } else if (selectedItem?.label === "Fullscreen") {
+              if (draftToggle !== isFullscreen) toggleFullscreen();
+            } else {
+              if (draftToggle !== uiSoundsEnabled) toggleSounds();
+            }
             setOverlay("none");
             break;
           case "B":
@@ -153,9 +186,17 @@ export function useSettingsPage({
       selectedSection,
       selectedItem,
       uiSoundsEnabled,
+      controllerLayout,
+      motionReduced,
+      vibrationEnabled,
+      isFullscreen,
       draftToggle,
       draftVolume,
       toggleSounds,
+      toggleControllerLayout,
+      toggleMotionReduced,
+      toggleVibration,
+      toggleFullscreen,
       setVolume,
       toSidebar,
       openOverlay,
@@ -234,8 +275,8 @@ export function SettingsPage({
             </h2>
             <p className="mt-2 text-base leading-6 text-stone-400">{selectedItem.hint}</p>
             <div className="mt-8 flex gap-4">
-              {(["On", "Off"] as const).map((label) => {
-                const isChosen = label === "On" ? draftToggle : !draftToggle;
+              {(selectedItem?.toggleLabels ?? (["On", "Off"] as [string, string])).map((label, i) => {
+                const isChosen = i === 0 ? draftToggle : !draftToggle;
                 return (
                   <div
                     key={label}
