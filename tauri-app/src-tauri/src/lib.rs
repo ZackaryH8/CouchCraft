@@ -168,26 +168,23 @@ pub fn run() {
                     loader TEXT NOT NULL,
                     minecraft_version TEXT NOT NULL,
                     color TEXT NOT NULL,
-                    mod_count TEXT NOT NULL DEFAULT 'No mods',
-                    last_played TEXT NOT NULL DEFAULT 'Never',
-                    playtime TEXT NOT NULL DEFAULT '0h',
-                    status TEXT NOT NULL DEFAULT 'New',
-                    summary TEXT NOT NULL DEFAULT '',
-                    details TEXT NOT NULL DEFAULT '',
+                    icon_data TEXT,
+                    loader_version TEXT NOT NULL DEFAULT '',
+                    java_version INTEGER NOT NULL DEFAULT 17,
+                    ram_mb INTEGER NOT NULL DEFAULT 2048,
+                    jvm_args TEXT NOT NULL DEFAULT '',
+                    notes TEXT NOT NULL DEFAULT '',
+                    last_played_at INTEGER,
+                    play_time_secs INTEGER NOT NULL DEFAULT 0,
                     sort_order INTEGER NOT NULL DEFAULT 0,
                     created_at INTEGER NOT NULL DEFAULT (unixepoch())
                 );
+
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
-            ",
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 3,
-            description: "multi_account",
-            sql: "
+
                 CREATE TABLE IF NOT EXISTS accounts (
                     id TEXT PRIMARY KEY,
                     ms_refresh_token TEXT NOT NULL,
@@ -197,32 +194,6 @@ pub fn run() {
                     expires_at INTEGER NOT NULL,
                     added_at INTEGER NOT NULL DEFAULT (unixepoch())
                 );
-            ",
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 4,
-            description: "instance_icon_data",
-            sql: "ALTER TABLE instances ADD COLUMN icon_data TEXT;",
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 5,
-            description: "content_from_modpack",
-            sql: "ALTER TABLE content ADD COLUMN from_modpack INTEGER NOT NULL DEFAULT 0;",
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 2,
-            description: "instance_v2_content_java",
-            sql: "
-                ALTER TABLE instances ADD COLUMN loader_version TEXT NOT NULL DEFAULT '';
-                ALTER TABLE instances ADD COLUMN java_version INTEGER NOT NULL DEFAULT 17;
-                ALTER TABLE instances ADD COLUMN ram_mb INTEGER NOT NULL DEFAULT 2048;
-                ALTER TABLE instances ADD COLUMN jvm_args TEXT NOT NULL DEFAULT '';
-                ALTER TABLE instances ADD COLUMN notes TEXT NOT NULL DEFAULT '';
-                ALTER TABLE instances ADD COLUMN last_played_at INTEGER;
-                ALTER TABLE instances ADD COLUMN play_time_secs INTEGER NOT NULL DEFAULT 0;
 
                 CREATE TABLE IF NOT EXISTS content (
                     id TEXT PRIMARY KEY,
@@ -235,6 +206,7 @@ pub fn run() {
                     modrinth_project_id TEXT,
                     modrinth_version_id TEXT,
                     enabled INTEGER NOT NULL DEFAULT 1,
+                    from_modpack INTEGER NOT NULL DEFAULT 0,
                     installed_at INTEGER NOT NULL DEFAULT (unixepoch()),
                     update_checked_at INTEGER,
                     update_available INTEGER NOT NULL DEFAULT 0
