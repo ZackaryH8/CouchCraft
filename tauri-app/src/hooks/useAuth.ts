@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { saveAuth, loadAuth, clearAuth } from "../services/db";
+import {
+  loadAccounts, upsertAccount, deleteAccount,
+  getActiveAccountId, setActiveAccountId, migrateLegacyAuth,
+} from "../services/db";
 import type { McAccount } from "../types";
 
-export type AuthStatus = "loading" | "unauthenticated" | "signing-in" | "authenticated";
+export type AuthStatus = "loading" | "ready";
 
 export interface DeviceCodeInfo {
   deviceCode: string;
@@ -21,18 +24,23 @@ type RawAccount = {
   expires_at: number;
 };
 
-function rawToAccount(raw: RawAccount): McAccount {
+function rawToAccount(raw: RawAccount, existingId?: string, existingAddedAt?: number): McAccount {
   return {
+    id: existingId ?? crypto.randomUUID(),
+    msRefreshToken: raw.ms_refresh_token,
+    mcAccessToken: raw.mc_access_token,
     mcUsername: raw.mc_username,
     mcUuid: raw.mc_uuid,
-    mcAccessToken: raw.mc_access_token,
     expiresAt: raw.expires_at,
+    addedAt: existingAddedAt ?? Math.floor(Date.now() / 1000),
   };
 }
 
 export function useAuth() {
   const [status, setStatus] = useState<AuthStatus>("loading");
-  const [account, setAccount] = useState<McAccount | null>(null);
+  const [accounts, setAccounts] = useState<McAccount[]>([]);
+  const [activeAccountId, setActiveAccountIdState] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
   const [deviceCode, setDeviceCode] = useState<DeviceCodeInfo | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -44,74 +52,41 @@ export function useAuth() {
     }
   }, []);
 
-  const applyAccount = useCallback(
-    async (raw: RawAccount) => {
-      stopPolling();
-      await saveAuth(raw);
-      setAccount(rawToAccount(raw));
-      setDeviceCode(null);
-      setStatus("authenticated");
-    },
-    [stopPolling],
-  );
+  const activeAccount = accounts.find((a) => a.id === activeAccountId) ?? null;
 
-  // Load saved auth on mount, refresh if expired
+  // Load all accounts on mount, migrate legacy single-account if needed
   useEffect(() => {
-    if (!isTauri()) {
-      setStatus("unauthenticated");
-      return;
-    }
-    loadAuth()
-      .then(async (stored) => {
-        if (!stored) {
-          setStatus("unauthenticated");
-          return;
-        }
-        const now = Math.floor(Date.now() / 1000);
-        if (stored.expires_at > now + 300) {
-          setAccount(rawToAccount(stored));
-          setStatus("authenticated");
-          return;
-        }
-        // Token expired — try silent refresh
-        try {
-          const refreshed = await invoke<RawAccount>("refresh_mc_auth", {
-            refreshToken: stored.ms_refresh_token,
-          });
-          await applyAccount(refreshed);
-        } catch {
-          setStatus("unauthenticated");
-        }
-      })
-      .catch(() => setStatus("unauthenticated"));
-  }, [applyAccount]);
+    if (!isTauri()) { setStatus("ready"); return; }
+    (async () => {
+      await migrateLegacyAuth();
+      const [accs, activeId] = await Promise.all([loadAccounts(), getActiveAccountId()]);
 
-  // Polling loop — runs while device code is active
-  useEffect(() => {
-    if (!deviceCode) return;
+      // Silently refresh any account whose token is within 5 minutes of expiry
+      const now = Math.floor(Date.now() / 1000);
+      const refreshed = await Promise.all(
+        accs.map(async (acc) => {
+          if (acc.expiresAt > now + 300) return acc;
+          try {
+            const raw = await invoke<RawAccount>("refresh_mc_auth", { refreshToken: acc.msRefreshToken });
+            const updated = rawToAccount(raw, acc.id, acc.addedAt);
+            await upsertAccount(updated);
+            return updated;
+          } catch {
+            return acc;
+          }
+        }),
+      );
 
-    const poll = async () => {
-      try {
-        const result = await invoke<RawAccount | null>("poll_device_code", {
-          deviceCode: deviceCode.deviceCode,
-        });
-        if (result) await applyAccount(result);
-      } catch (e) {
-        setAuthError(String(e));
-        stopPolling();
-        setDeviceCode(null);
-        setStatus("unauthenticated");
-      }
-    };
-
-    pollRef.current = setInterval(poll, Math.max(deviceCode.interval, 5) * 1000);
-    return stopPolling;
-  }, [deviceCode, applyAccount, stopPolling]);
+      setAccounts(refreshed);
+      setActiveAccountIdState(activeId ?? refreshed[0]?.id ?? null);
+      setStatus("ready");
+    })();
+  }, []);
 
   const startSignIn = useCallback(async () => {
     if (!isTauri()) return;
     setAuthError(null);
-    setStatus("signing-in");
+    setSigningIn(true);
     try {
       const info = await invoke<{
         device_code: string;
@@ -129,7 +104,7 @@ export function useAuth() {
       });
     } catch (e) {
       setAuthError(String(e));
-      setStatus("unauthenticated");
+      setSigningIn(false);
     }
   }, []);
 
@@ -137,14 +112,73 @@ export function useAuth() {
     stopPolling();
     setDeviceCode(null);
     setAuthError(null);
-    setStatus("unauthenticated");
+    setSigningIn(false);
   }, [stopPolling]);
 
-  const signOut = useCallback(async () => {
-    await clearAuth();
-    setAccount(null);
-    setStatus("unauthenticated");
+  // Polling loop during device code sign-in
+  useEffect(() => {
+    if (!deviceCode) return;
+
+    const poll = async () => {
+      try {
+        const result = await invoke<RawAccount | null>("poll_device_code", {
+          deviceCode: deviceCode.deviceCode,
+        });
+        if (!result) return;
+
+        stopPolling();
+        const account = rawToAccount(result);
+        await upsertAccount(account);
+        await setActiveAccountId(account.id);
+        setAccounts((prev) => {
+          const filtered = prev.filter((a) => a.mcUuid !== account.mcUuid);
+          return [...filtered, account];
+        });
+        setActiveAccountIdState(account.id);
+        setDeviceCode(null);
+        setSigningIn(false);
+      } catch (e) {
+        stopPolling();
+        setAuthError(String(e));
+        setDeviceCode(null);
+        setSigningIn(false);
+      }
+    };
+
+    pollRef.current = setInterval(poll, Math.max(deviceCode.interval, 5) * 1000);
+    return stopPolling;
+  }, [deviceCode, stopPolling]);
+
+  const switchAccount = useCallback(async (id: string) => {
+    await setActiveAccountId(id);
+    setActiveAccountIdState(id);
   }, []);
 
-  return { status, account, deviceCode, authError, startSignIn, cancelSignIn, signOut };
+  const removeAccount = useCallback(async (id: string) => {
+    await deleteAccount(id);
+    setAccounts((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      // If we removed the active account, switch to first remaining
+      if (id === activeAccountId) {
+        const next0 = next[0]?.id ?? null;
+        void setActiveAccountId(next0);
+        setActiveAccountIdState(next0);
+      }
+      return next;
+    });
+  }, [activeAccountId]);
+
+  return {
+    status,
+    accounts,
+    activeAccount,
+    activeAccountId,
+    signingIn,
+    deviceCode,
+    authError,
+    startSignIn,
+    cancelSignIn,
+    switchAccount,
+    removeAccount,
+  };
 }
