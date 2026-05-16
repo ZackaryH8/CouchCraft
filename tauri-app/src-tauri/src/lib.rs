@@ -160,9 +160,8 @@ pub fn run() {
     let migrations = vec![
         Migration {
             version: 1,
-            description: "initial_schema",
-            sql: "
-                CREATE TABLE IF NOT EXISTS instances (
+            description: "create_instances",
+            sql: "CREATE TABLE IF NOT EXISTS instances (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
                     loader TEXT NOT NULL,
@@ -178,14 +177,22 @@ pub fn run() {
                     play_time_secs INTEGER NOT NULL DEFAULT 0,
                     sort_order INTEGER NOT NULL DEFAULT 0,
                     created_at INTEGER NOT NULL DEFAULT (unixepoch())
-                );
-
-                CREATE TABLE IF NOT EXISTS settings (
+                );",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "create_settings",
+            sql: "CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS accounts (
+                );",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "create_accounts",
+            sql: "CREATE TABLE IF NOT EXISTS accounts (
                     id TEXT PRIMARY KEY,
                     ms_refresh_token TEXT NOT NULL,
                     mc_access_token TEXT NOT NULL,
@@ -193,9 +200,13 @@ pub fn run() {
                     mc_uuid TEXT NOT NULL,
                     expires_at INTEGER NOT NULL,
                     added_at INTEGER NOT NULL DEFAULT (unixepoch())
-                );
-
-                CREATE TABLE IF NOT EXISTS content (
+                );",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 4,
+            description: "create_content",
+            sql: "CREATE TABLE IF NOT EXISTS content (
                     id TEXT PRIMARY KEY,
                     instance_id TEXT NOT NULL,
                     category TEXT NOT NULL,
@@ -210,15 +221,18 @@ pub fn run() {
                     installed_at INTEGER NOT NULL DEFAULT (unixepoch()),
                     update_checked_at INTEGER,
                     update_available INTEGER NOT NULL DEFAULT 0
-                );
-
-                CREATE TABLE IF NOT EXISTS java_runtimes (
+                );",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 5,
+            description: "create_java_runtimes",
+            sql: "CREATE TABLE IF NOT EXISTS java_runtimes (
                     version INTEGER PRIMARY KEY,
                     path TEXT NOT NULL,
                     build_string TEXT NOT NULL DEFAULT '',
                     is_system INTEGER NOT NULL DEFAULT 0
-                );
-            ",
+                );",
             kind: MigrationKind::Up,
         },
     ];
