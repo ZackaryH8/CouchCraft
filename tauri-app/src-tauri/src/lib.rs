@@ -1,5 +1,19 @@
 mod auth;
+mod content;
+mod files;
+mod versions;
+mod worlds;
+mod servers;
+mod logs;
+mod install;
 use auth::{start_device_code_flow, poll_device_code, refresh_mc_auth};
+use content::{search_modrinth, get_modrinth_best_version, download_content, delete_content_file};
+use files::{list_instance_files, rename_instance_file, delete_instance_path};
+use versions::{fetch_mc_versions, fetch_loader_versions};
+use worlds::list_worlds;
+use servers::list_servers;
+use logs::{read_instance_log, get_latest_crash_report};
+use install::{prepare_instance, launch_game, detect_java_runtimes};
 use tauri_plugin_sql::{Migration, MigrationKind};
 use gilrs::{
     ff::{BaseEffect, BaseEffectType, Effect, EffectBuilder, Replay, Ticks},
@@ -8,12 +22,7 @@ use gilrs::{
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::sync::Mutex;
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+use tauri::Manager;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LaunchConfig {
@@ -122,38 +131,136 @@ fn rumble_gamepad(
     Ok(())
 }
 
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+#[tauri::command]
+async fn create_instance_dirs(app: tauri::AppHandle, instance_id: String) -> Result<String, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mc_dir = data_dir.join("instances").join(&instance_id).join(".minecraft");
+
+    for subdir in &[
+        "mods", "resourcepacks", "shaderpacks", "datapacks",
+        "saves", "logs", "screenshots", "config",
+    ] {
+        std::fs::create_dir_all(mc_dir.join(subdir)).map_err(|e| e.to_string())?;
+    }
+
+    Ok(mc_dir.to_string_lossy().into_owned())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let gamepad_state = GamepadState::new().expect("failed to initialize gilrs");
 
-    let migrations = vec![Migration {
-        version: 1,
-        description: "initial_schema",
-        sql: "
-            CREATE TABLE IF NOT EXISTS instances (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                loader TEXT NOT NULL,
-                minecraft_version TEXT NOT NULL,
-                color TEXT NOT NULL,
-                mod_count TEXT NOT NULL DEFAULT 'No mods',
-                last_played TEXT NOT NULL DEFAULT 'Never',
-                playtime TEXT NOT NULL DEFAULT '0h',
-                status TEXT NOT NULL DEFAULT 'New',
-                summary TEXT NOT NULL DEFAULT '',
-                details TEXT NOT NULL DEFAULT '',
-                sort_order INTEGER NOT NULL DEFAULT 0,
-                created_at INTEGER NOT NULL DEFAULT (unixepoch())
-            );
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-        ",
-        kind: MigrationKind::Up,
-    }];
+    let migrations = vec![
+        Migration {
+            version: 1,
+            description: "initial_schema",
+            sql: "
+                CREATE TABLE IF NOT EXISTS instances (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    loader TEXT NOT NULL,
+                    minecraft_version TEXT NOT NULL,
+                    color TEXT NOT NULL,
+                    mod_count TEXT NOT NULL DEFAULT 'No mods',
+                    last_played TEXT NOT NULL DEFAULT 'Never',
+                    playtime TEXT NOT NULL DEFAULT '0h',
+                    status TEXT NOT NULL DEFAULT 'New',
+                    summary TEXT NOT NULL DEFAULT '',
+                    details TEXT NOT NULL DEFAULT '',
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+                );
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+            ",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "multi_account",
+            sql: "
+                CREATE TABLE IF NOT EXISTS accounts (
+                    id TEXT PRIMARY KEY,
+                    ms_refresh_token TEXT NOT NULL,
+                    mc_access_token TEXT NOT NULL,
+                    mc_username TEXT NOT NULL,
+                    mc_uuid TEXT NOT NULL,
+                    expires_at INTEGER NOT NULL,
+                    added_at INTEGER NOT NULL DEFAULT (unixepoch())
+                );
+            ",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "instance_v2_content_java",
+            sql: "
+                ALTER TABLE instances ADD COLUMN loader_version TEXT NOT NULL DEFAULT '';
+                ALTER TABLE instances ADD COLUMN java_version INTEGER NOT NULL DEFAULT 17;
+                ALTER TABLE instances ADD COLUMN ram_mb INTEGER NOT NULL DEFAULT 2048;
+                ALTER TABLE instances ADD COLUMN jvm_args TEXT NOT NULL DEFAULT '';
+                ALTER TABLE instances ADD COLUMN notes TEXT NOT NULL DEFAULT '';
+                ALTER TABLE instances ADD COLUMN last_played_at INTEGER;
+                ALTER TABLE instances ADD COLUMN play_time_secs INTEGER NOT NULL DEFAULT 0;
+
+                CREATE TABLE IF NOT EXISTS content (
+                    id TEXT PRIMARY KEY,
+                    instance_id TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    version TEXT NOT NULL DEFAULT '',
+                    source TEXT NOT NULL DEFAULT 'local',
+                    modrinth_project_id TEXT,
+                    modrinth_version_id TEXT,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    installed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                    update_checked_at INTEGER,
+                    update_available INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE TABLE IF NOT EXISTS java_runtimes (
+                    version INTEGER PRIMARY KEY,
+                    path TEXT NOT NULL,
+                    build_string TEXT NOT NULL DEFAULT '',
+                    is_system INTEGER NOT NULL DEFAULT 0
+                );
+            ",
+            kind: MigrationKind::Up,
+        },
+    ];
 
     tauri::Builder::default()
+        .setup(|app| {
+            let window = app.get_webview_window("main").unwrap();
+
+            let size = window.current_monitor().ok().flatten().map(|m| {
+                let s = m.size();
+                (s.width, s.height)
+            }).or_else(|| {
+                // Fallback: read resolution exported by startup.sh via swaymsg.
+                // current_monitor() returns None on Wayland before window mapping.
+                let res = std::env::var("COUCHCRAFT_RESOLUTION").ok()?;
+                let (w, h) = res.split_once('x')?;
+                Some((w.parse().ok()?, h.parse().ok()?))
+            });
+
+            if let Some((width, height)) = size {
+                let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width, height }));
+                let _ = window.set_position(tauri::Position::Physical(
+                    tauri::PhysicalPosition { x: 0, y: 0 },
+                ));
+            }
+
+            Ok(())
+        })
         .manage(gamepad_state)
         .plugin(
             tauri_plugin_sql::Builder::new()
@@ -163,13 +270,30 @@ pub fn run() {
         .plugin(tauri_plugin_gamepad::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-        greet,
-        launch_minecraft,
-        rumble_gamepad,
-        start_device_code_flow,
-        poll_device_code,
-        refresh_mc_auth,
-    ])
+            launch_minecraft,
+            rumble_gamepad,
+            quit_app,
+            create_instance_dirs,
+            fetch_mc_versions,
+            fetch_loader_versions,
+            search_modrinth,
+            get_modrinth_best_version,
+            download_content,
+            delete_content_file,
+            list_instance_files,
+            rename_instance_file,
+            delete_instance_path,
+            list_worlds,
+            list_servers,
+            read_instance_log,
+            get_latest_crash_report,
+            prepare_instance,
+            launch_game,
+            detect_java_runtimes,
+            start_device_code_flow,
+            poll_device_code,
+            refresh_mc_auth,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -2,9 +2,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const CLIENT_ID: &str = "00000000402b5328";
-const DEVICE_CODE_URL: &str = "https://login.live.com/oauth20_connect.srf";
-const TOKEN_URL: &str = "https://login.live.com/oauth20_token.srf";
+const CLIENT_ID: &str = "c8b4fed7-2925-4a9f-8224-65e41c6e92d5";
+const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
+const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const XBL_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XSTS_URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
 const MC_LOGIN_URL: &str = "https://api.minecraftservices.com/launcher/login";
@@ -134,7 +134,7 @@ pub async fn start_device_code_flow() -> Result<DeviceCodeInfo, String> {
         .post(DEVICE_CODE_URL)
         .form(&[
             ("client_id", CLIENT_ID),
-            ("scope", "service::user.auth.xboxlive.com::MBI_SSL"),
+            ("scope", "XboxLive.signin offline_access"),
             ("response_type", "device_code"),
         ])
         .send()
@@ -200,7 +200,7 @@ pub async fn refresh_mc_auth(refresh_token: String) -> Result<AuthAccount, Strin
             ("grant_type", "refresh_token"),
             ("client_id", CLIENT_ID),
             ("refresh_token", refresh_token.as_str()),
-            ("scope", "service::user.auth.xboxlive.com::MBI_SSL"),
+            ("scope", "XboxLive.signin offline_access"),
         ])
         .send()
         .await
@@ -238,7 +238,7 @@ async fn run_mc_auth_chain(
             properties: XblProperties {
                 auth_method: "RPS".into(),
                 site_name: "user.auth.xboxlive.com".into(),
-                rps_ticket: ms_access_token.clone(),
+                rps_ticket: format!("d={}", ms_access_token),
             },
             relying_party: "http://auth.xboxlive.com".into(),
             token_type: "JWT".into(),
