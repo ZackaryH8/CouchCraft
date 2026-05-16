@@ -28,12 +28,19 @@ export function useHomePage({ instances, toSidebar, push }: UseHomePageOptions) 
   const instanceRefs = useRef<Array<HTMLElement | null>>([]);
 
   const [activeIndex, setActiveIndex] = useState(0);
-  const [homeFocus, setHomeFocus] = useState<HomeFocus>("hero");
+  const [homeFocus, setHomeFocus] = useState<HomeFocus>(
+    instances.length === 0 ? "grid" : "hero",
+  );
 
   // Clamp activeIndex when instance list shrinks
   useEffect(() => {
     if (activeIndex > instances.length) setActiveIndex(instances.length);
   }, [instances.length, activeIndex]);
+
+  // If the last instance is deleted, drop out of hero focus
+  useEffect(() => {
+    if (instances.length === 0) setHomeFocus("grid");
+  }, [instances.length]);
 
   useEffect(() => {
     const opts: ScrollIntoViewOptions = { behavior: "smooth", block: "nearest", inline: "nearest" };
@@ -46,7 +53,7 @@ export function useHomePage({ instances, toSidebar, push }: UseHomePageOptions) 
 
   const handleInput = useCallback(
     (input: GamepadInput) => {
-      if (homeFocus === "hero") {
+      if (homeFocus === "hero" && instances.length > 0) {
         switch (input) {
           case "LEFT":
           case "B":
@@ -98,7 +105,9 @@ export function useHomePage({ instances, toSidebar, push }: UseHomePageOptions) 
     [activeIndex, homeFocus, instances, push, toSidebar],
   );
 
-  const selectedInstance = instances[Math.min(activeIndex, instances.length - 1)];
+  const selectedInstance = instances.length > 0
+    ? instances[Math.min(activeIndex, instances.length - 1)]
+    : undefined;
 
   return {
     activeIndex,
@@ -117,7 +126,7 @@ export function useHomePage({ instances, toSidebar, push }: UseHomePageOptions) 
 
 interface HomePageProps {
   instances: GameInstance[];
-  selectedInstance: GameInstance;
+  selectedInstance: GameInstance | undefined;
   activeIndex: number;
   homeFocus: "hero" | "grid";
   hasFocus: boolean;
@@ -150,6 +159,7 @@ export function HomePage({
 }: HomePageProps) {
   return (
     <>
+      {selectedInstance ? (
       <section
         ref={heroRef}
         onMouseEnter={onMoveToHero}
@@ -235,6 +245,21 @@ export function HomePage({
           </div>
         </div>
       </section>
+      ) : (
+      <section className="flex items-center justify-center rounded-[2rem] border border-dashed border-white/10 bg-[#111413] p-12">
+        <div className="text-center">
+          <p className="text-sm font-semibold uppercase tracking-[0.42em] text-stone-500">
+            Welcome to CouchCraft
+          </p>
+          <h2 className="mt-4 font-display text-5xl tracking-[-0.07em] text-white">
+            No instances yet
+          </h2>
+          <p className="mt-4 text-xl text-stone-400">
+            Press A on the New Instance card below to get started.
+          </p>
+        </div>
+      </section>
+      )}
 
       <section ref={gridRef} className="flex min-h-0 flex-1 flex-col">
         <div className="mb-5 flex items-end justify-between">
