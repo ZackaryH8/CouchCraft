@@ -1,4 +1,5 @@
-# Add this block to your Wolf config.toml (under [[profiles.apps]])
+# CouchCraft — Wolf app config
+# Add this block to your Wolf config.toml under [[profiles.apps]]
 
 [[profiles.apps]]
 title = "CouchCraft"
@@ -7,7 +8,7 @@ start_virtual_compositor = true
 [profiles.apps.runner]
 type = "docker"
 name = "WolfCouchCraft"
-image = "couchcraft:latest"
+image = "ghcr.io/zackaryh8/couchcraft:latest"
 mounts = []
 env = [
   "RUN_SWAY=true",
