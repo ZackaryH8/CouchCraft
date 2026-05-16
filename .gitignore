@@ -1,22 +1,39 @@
-# Tauri / Rust
+# ── Tauri / Rust ──────────────────────────────────────────────────────────────
 tauri-app/src-tauri/target/
 tauri-app/src-tauri/gen/
 
-# Node
+# ── Node ──────────────────────────────────────────────────────────────────────
 tauri-app/node_modules/
 tauri-app/dist/
+tauri-app/dist-ssr/
 
-# Env / secrets
+# ── Docker build artifacts ─────────────────────────────────────────────────────
+# Image exports from `docker save` — can be hundreds of MB
+docker/*.tar
+docker/*.tar.gz
+
+# ── SQLite (Tauri plugin creates these at runtime in app data dir) ─────────────
+*.db
+*.db-shm
+*.db-wal
+
+# ── Env / secrets ─────────────────────────────────────────────────────────────
 .env
 .env.*
 !.env.example
 
-# OS
+# ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Editor
+# ── Editor ────────────────────────────────────────────────────────────────────
 .vscode/settings.json
 .idea/
 *.swp
 *.swo
+*.suo
+
+# ── Claude Code ───────────────────────────────────────────────────────────────
+# Local settings and session state — not shared across machines
+.claude/settings.local.json
