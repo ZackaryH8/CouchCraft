@@ -19,10 +19,10 @@ interface UseHomePageOptions {
   instances: GameInstance[];
   launchInstance: (instance: GameInstance) => Promise<void>;
   toSidebar: () => void;
-  push: (frame: { id: "create" }) => void;
+  push: (frame: { id: "create" } | { id: "instance"; instanceId: string }) => void;
 }
 
-export function useHomePage({ instances, launchInstance, toSidebar, push }: UseHomePageOptions) {
+export function useHomePage({ instances, toSidebar, push }: UseHomePageOptions) {
   const heroRef = useRef<HTMLElement | null>(null);
   const gridRef = useRef<HTMLElement | null>(null);
   const instanceRefs = useRef<Array<HTMLElement | null>>([]);
@@ -55,9 +55,11 @@ export function useHomePage({ instances, launchInstance, toSidebar, push }: UseH
           case "DOWN":
             setHomeFocus("grid");
             break;
-          case "A":
-            void launchInstance(instances[activeIndex]);
+          case "A": {
+            const inst = instances[activeIndex];
+            if (inst) push({ id: "instance", instanceId: inst.id });
             break;
+          }
         }
         return;
       }
@@ -83,14 +85,17 @@ export function useHomePage({ instances, launchInstance, toSidebar, push }: UseH
           break;
         case "A":
           if (activeIndex === instances.length) push({ id: "create" });
-          else void launchInstance(instances[activeIndex]);
+          else {
+            const inst = instances[activeIndex];
+            if (inst) push({ id: "instance", instanceId: inst.id });
+          }
           break;
         case "B":
           setHomeFocus("hero");
           break;
       }
     },
-    [activeIndex, homeFocus, instances, launchInstance, push, toSidebar],
+    [activeIndex, homeFocus, instances, push, toSidebar],
   );
 
   const selectedInstance = instances[Math.min(activeIndex, instances.length - 1)];
@@ -266,13 +271,18 @@ export function HomePage({
                 <div className="absolute -right-10 top-0 h-36 w-36 rounded-full bg-[var(--accent)] opacity-25 blur-3xl transition duration-200 group-hover:scale-110" />
                 <div className="relative flex h-full flex-col">
                   <div className="flex items-start justify-between gap-4">
-                    <div
-                      className="h-24 w-24 rounded-[1.5rem] border border-white/10 shadow-[inset_0_1px_30px_rgba(255,255,255,0.08)]"
-                      style={{
-                        background:
-                          "linear-gradient(145deg, rgba(255,255,255,0.14), rgba(0,0,0,0.18)), var(--accent)",
-                      }}
-                    />
+                    {instance.iconData ? (
+                      <img
+                        src={`data:image/png;base64,${instance.iconData}`}
+                        alt=""
+                        className="h-24 w-24 rounded-[1.5rem] border border-white/10 object-cover shadow-[inset_0_1px_30px_rgba(255,255,255,0.08)]"
+                      />
+                    ) : (
+                      <div
+                        className="h-24 w-24 rounded-[1.5rem] border border-white/10 shadow-[inset_0_1px_30px_rgba(255,255,255,0.08)]"
+                        style={{ background: "linear-gradient(145deg, rgba(255,255,255,0.14), rgba(0,0,0,0.18)), var(--accent)" }}
+                      />
+                    )}
                     <div
                      className="rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm font-semibold uppercase tracking-[0.28em]"
                      style={{ backgroundColor: LOADER_COLORS[instance.loaderType] + "20", borderColor: LOADER_COLORS[instance.loaderType] + "40" }}

@@ -1,0 +1,2 @@
+- OSK does not set the focus back to previous element after using B on controller but does if we submit
+- Some UI says press X instead of y because of linux quirks.

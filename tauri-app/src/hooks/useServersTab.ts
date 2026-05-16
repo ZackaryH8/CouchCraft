@@ -31,7 +31,7 @@ export function useServersTab({ instanceId, isActive, onLaunch }: UseServersTabO
       .then(setServers)
       .catch(() => setServers([]))
       .finally(() => setIsLoading(false));
-  }, [instanceId, isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [instanceId, isActive]); // intentional: setState fns are stable refs and not needed as deps // eslint-disable-line react-hooks/exhaustive-deps
 
   const onLaunchServer = useCallback((ip: string) => { onLaunch(ip); }, [onLaunch]);
 

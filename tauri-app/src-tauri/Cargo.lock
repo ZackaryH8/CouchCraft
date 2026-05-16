@@ -703,6 +703,7 @@ dependencies = [
 name = "couchcraft"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "fastnbt",
  "flate2",
  "futures",

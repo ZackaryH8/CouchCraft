@@ -16,6 +16,7 @@ type InstanceRow = {
   loader: string;
   minecraft_version: string;
   color: string;
+  icon_data: string | null;
   loader_version: string;
   java_version: number;
   ram_mb: number;
@@ -36,6 +37,7 @@ function rowToInstance(row: InstanceRow): GameInstance {
     loaderVersion: row.loader_version,
     minecraftVersion: row.minecraft_version,
     color: row.color,
+    iconData: row.icon_data,
     javaVersion: row.java_version as JavaVersion,
     ramMb: row.ram_mb,
     jvmArgs: row.jvm_args,
@@ -51,7 +53,7 @@ function rowToInstance(row: InstanceRow): GameInstance {
 export async function loadInstances(): Promise<GameInstance[]> {
   const db = await getDb();
   const rows = await db.select<InstanceRow[]>(`
-    SELECT i.id, i.name, i.loader, i.minecraft_version, i.color,
+    SELECT i.id, i.name, i.loader, i.minecraft_version, i.color, i.icon_data,
            i.loader_version, i.java_version, i.ram_mb, i.jvm_args, i.notes,
            i.last_played_at, i.play_time_secs, i.sort_order, i.created_at,
            (SELECT COUNT(*) FROM content WHERE instance_id = i.id AND category = 'mod') AS mod_count
@@ -65,15 +67,16 @@ export async function insertInstance(instance: GameInstance, sortOrder: number):
   const db = await getDb();
   await db.execute(
     `INSERT INTO instances
-     (id, name, loader, minecraft_version, color, loader_version, java_version, ram_mb,
-      jvm_args, notes, last_played_at, play_time_secs, sort_order, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+     (id, name, loader, minecraft_version, color, icon_data, loader_version, java_version,
+      ram_mb, jvm_args, notes, last_played_at, play_time_secs, sort_order, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
       instance.id,
       instance.name,
       instance.loaderType,
       instance.minecraftVersion,
       instance.color,
+      instance.iconData,
       instance.loaderVersion,
       instance.javaVersion,
       instance.ramMb,
@@ -91,9 +94,9 @@ export async function updateInstance(instance: GameInstance, sortOrder: number):
   const db = await getDb();
   await db.execute(
     `UPDATE instances SET
-       name = $2, loader = $3, minecraft_version = $4, color = $5,
-       loader_version = $6, java_version = $7, ram_mb = $8, jvm_args = $9,
-       notes = $10, last_played_at = $11, play_time_secs = $12, sort_order = $13
+       name = $2, loader = $3, minecraft_version = $4, color = $5, icon_data = $6,
+       loader_version = $7, java_version = $8, ram_mb = $9, jvm_args = $10,
+       notes = $11, last_played_at = $12, play_time_secs = $13, sort_order = $14
      WHERE id = $1`,
     [
       instance.id,
@@ -101,6 +104,7 @@ export async function updateInstance(instance: GameInstance, sortOrder: number):
       instance.loaderType,
       instance.minecraftVersion,
       instance.color,
+      instance.iconData,
       instance.loaderVersion,
       instance.javaVersion,
       instance.ramMb,
@@ -151,6 +155,7 @@ type ContentRow = {
   installed_at: number;
   update_checked_at: number | null;
   update_available: number;
+  from_modpack: number;
 };
 
 function rowToContent(row: ContentRow): ContentItem {
@@ -168,6 +173,7 @@ function rowToContent(row: ContentRow): ContentItem {
     installedAt: row.installed_at,
     updateCheckedAt: row.update_checked_at,
     updateAvailable: row.update_available === 1,
+    fromModpack: row.from_modpack === 1,
   };
 }
 
@@ -192,8 +198,8 @@ export async function insertContent(item: ContentItem): Promise<void> {
   await db.execute(
     `INSERT INTO content
      (id, instance_id, category, name, filename, version, source,
-      modrinth_project_id, modrinth_version_id, enabled, installed_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      modrinth_project_id, modrinth_version_id, enabled, installed_at, from_modpack)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [
       item.id,
       item.instanceId,
@@ -206,6 +212,7 @@ export async function insertContent(item: ContentItem): Promise<void> {
       item.modrinthVersionId,
       item.enabled ? 1 : 0,
       item.installedAt,
+      item.fromModpack ? 1 : 0,
     ],
   );
 }

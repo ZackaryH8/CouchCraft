@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { GameInstance, McAccount, PrepareProgress } from "../types";
@@ -6,6 +6,7 @@ import { upsertAccount, loadJavaRuntimes, touchLastPlayed, addPlayTime } from ".
 
 export interface LaunchState {
   isLaunching: boolean;
+  isGameRunning: boolean;
   launchingName: string | null;
   progress: PrepareProgress | null;
   launchError: string | null;
@@ -19,24 +20,30 @@ interface UseLauncherOptions {
 export function useLauncher({ onLaunched, onGameExited }: UseLauncherOptions = {}) {
   const [state, setState] = useState<LaunchState>({
     isLaunching: false,
+    isGameRunning: false,
     launchingName: null,
     progress: null,
     launchError: null,
   });
 
-  // Listen for game-exited events emitted by the Rust backend
+  const onGameExitedRef = useRef(onGameExited);
+  useEffect(() => { onGameExitedRef.current = onGameExited; }, [onGameExited]);
+
+  // Register the game-exited listener once — using a ref for the callback
+  // so changes to onGameExited never cause a new listener to be added.
   useEffect(() => {
     if (!isTauri()) return;
     const unlisten = listen<{ instanceId: string; elapsedSecs: number }>(
       "game-exited",
       async (event) => {
         const { instanceId, elapsedSecs } = event.payload;
+        setState((s) => ({ ...s, isGameRunning: false }));
         await addPlayTime(instanceId, elapsedSecs);
-        onGameExited?.(instanceId, elapsedSecs);
+        onGameExitedRef.current?.(instanceId, elapsedSecs);
       },
     );
     return () => { void unlisten.then((fn) => fn()); };
-  }, [onGameExited]);
+  }, []); // intentional: listener registered once on mount; onGameExited is accessed via ref above to avoid re-registration // eslint-disable-line react-hooks/exhaustive-deps
 
   const launchInstance = useCallback(async (
     instance: GameInstance,
@@ -48,7 +55,7 @@ export function useLauncher({ onLaunched, onGameExited }: UseLauncherOptions = {
       return;
     }
 
-    setState({ isLaunching: true, launchingName: instance.name, progress: null, launchError: null });
+    setState((s) => ({ ...s, isLaunching: true, launchingName: instance.name, progress: null, launchError: null }));
 
     const unlisten = await listen<PrepareProgress>("prepare-progress", (event) => {
       setState((s) => ({ ...s, progress: event.payload }));
@@ -121,12 +128,16 @@ export function useLauncher({ onLaunched, onGameExited }: UseLauncherOptions = {
       unlisten();
     }
 
-    setState({ isLaunching: false, launchingName: null, progress: null, launchError: null });
+    setState({ isLaunching: false, isGameRunning: true, launchingName: null, progress: null, launchError: null });
   }, [onLaunched]);
 
   const dismissError = useCallback(() => {
     setState((s) => ({ ...s, launchError: null }));
   }, []);
 
-  return { ...state, launchInstance, dismissError };
+  const forceUnlock = useCallback(() => {
+    setState((s) => ({ ...s, isGameRunning: false }));
+  }, []);
+
+  return { ...state, launchInstance, dismissError, forceUnlock };
 }

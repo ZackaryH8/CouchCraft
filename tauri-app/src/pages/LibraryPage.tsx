@@ -9,6 +9,7 @@ import {
 import type { GameInstance, NavFrame } from "../types";
 import { INSTANCE_COLORS, LOADER_LABELS } from "../constants";
 import { formatLastPlayed, formatModCount, formatPlaytime } from "../utils/format";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import type { GamepadInput } from "../hooks/useGamepad";
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -166,7 +167,7 @@ export function useLibraryPage({
             if (selectedIndex === instances.length) {
               push({ id: "create" });
             } else if (selectedInstance) {
-              void launchInstance(selectedInstance);
+              push({ id: "instance", instanceId: selectedInstance.id });
             }
             break;
           case "B":
@@ -281,40 +282,13 @@ export function LibraryPage({
 }: LibraryPageProps) {
   return (
     <section className="relative grid min-h-0 flex-1 grid-cols-[18rem_1fr] gap-6">
-      {/* Delete confirm overlay */}
       {overlay === "delete-confirm" && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[2rem] bg-black/70 backdrop-blur-sm">
-          <div className="simple-panel w-[34rem] rounded-[2rem] px-10 py-9">
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-red-400/80">
-              Confirm Delete
-            </p>
-            <h2 className="mt-3 font-display text-4xl tracking-[-0.05em] text-white">
-              Delete Instance?
-            </h2>
-            <p className="mt-3 text-lg leading-7 text-stone-400">
-              "{selectedInstance?.name}" will be permanently removed from your launcher.
-            </p>
-            <div className="mt-8 flex gap-4">
-              {["Cancel", "Delete"].map((label, i) => (
-                <div
-                  key={label}
-                  className={`flex-1 rounded-[1.25rem] border px-6 py-4 text-center transition duration-200 ${
-                    i === deleteChoice
-                      ? i === 1
-                        ? "border-red-400/60 bg-red-950 text-red-200"
-                        : "border-lime-300/60 bg-lime-300 text-slate-950"
-                      : "border-white/8 bg-white/[0.03] text-stone-400"
-                  }`}
-                >
-                  <p className="text-xl font-semibold">{label}</p>
-                </div>
-              ))}
-            </div>
-            <p className="mt-4 text-sm text-stone-500">
-              Use left/right to choose, A to confirm, B to cancel.
-            </p>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Delete Instance?"
+          message={`"${selectedInstance?.name}" will be permanently removed from your launcher.`}
+          choice={deleteChoice}
+          confirmLabel="Delete"
+        />
       )}
 
       {/* Color picker overlay */}
@@ -369,10 +343,15 @@ export function LibraryPage({
                 isSelected ? "border-lime-300/60 bg-[#171c1a]" : "border-white/8 bg-[#121514]"
               }`}
             >
-              <div
-                className="h-8 w-8 shrink-0 rounded-full border border-white/10"
-                style={{ background: instance.color }}
-              />
+              {instance.iconData ? (
+                <img
+                  src={`data:image/png;base64,${instance.iconData}`}
+                  alt=""
+                  className="h-8 w-8 shrink-0 rounded-full border border-white/10 object-cover"
+                />
+              ) : (
+                <div className="h-8 w-8 shrink-0 rounded-full border border-white/10" style={{ background: instance.color }} />
+              )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-lg font-semibold text-white">{instance.name}</p>
                 <p className="text-sm text-stone-500">
@@ -434,12 +413,18 @@ export function LibraryPage({
           >
             <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-[var(--accent)] opacity-20 blur-3xl" />
             <div className="relative flex items-center gap-5">
-              <div
-                className="h-20 w-20 shrink-0 rounded-[1.5rem] border border-white/10 shadow-[inset_0_1px_30px_rgba(255,255,255,0.08)]"
-                style={{
-                  background: `linear-gradient(145deg, rgba(255,255,255,0.14), rgba(0,0,0,0.18)), ${selectedInstance.color}`,
-                }}
-              />
+              {selectedInstance.iconData ? (
+                <img
+                  src={`data:image/png;base64,${selectedInstance.iconData}`}
+                  alt=""
+                  className="h-20 w-20 shrink-0 rounded-[1.5rem] border border-white/10 object-cover shadow-[inset_0_1px_30px_rgba(255,255,255,0.08)]"
+                />
+              ) : (
+                <div
+                  className="h-20 w-20 shrink-0 rounded-[1.5rem] border border-white/10 shadow-[inset_0_1px_30px_rgba(255,255,255,0.08)]"
+                  style={{ background: `linear-gradient(145deg, rgba(255,255,255,0.14), rgba(0,0,0,0.18)), ${selectedInstance.color}` }}
+                />
+              )}
               <div>
                 <h2 className="font-display text-4xl tracking-[-0.05em] text-white">
                   {selectedInstance.name}

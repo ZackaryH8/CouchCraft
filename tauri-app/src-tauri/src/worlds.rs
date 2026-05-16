@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::Manager;
@@ -34,6 +35,7 @@ pub struct WorldInfo {
     pub folder: String,
     pub level_name: String,
     pub game_mode: String,
+    pub icon: Option<String>,
     pub last_played_ms: Option<i64>,
     pub mc_version: Option<String>,
 }
@@ -68,11 +70,14 @@ pub async fn list_worlds(app: tauri::AppHandle, instance_id: String) -> Result<V
         if !path.join("level.dat").exists() { continue; }
 
         let data = parse_level_dat(&path.join("level.dat"));
+        let icon = std::fs::read(path.join("icon.png")).ok()
+            .map(|bytes| STANDARD.encode(&bytes));
         worlds.push(WorldInfo {
             level_name: data.as_ref().map(|d| d.level_name.clone()).filter(|s| !s.is_empty()).unwrap_or_else(|| folder.clone()),
             game_mode: data.as_ref().and_then(|d| d.game_type).map(game_mode_str).unwrap_or("Survival").to_string(),
             last_played_ms: data.as_ref().and_then(|d| d.last_played),
             mc_version: data.as_ref().and_then(|d| d.version.as_ref()).and_then(|v| v.name.clone()),
+            icon,
             folder,
         });
     }

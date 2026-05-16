@@ -21,6 +21,7 @@ export interface GameInstance {
   loaderVersion: string;
   minecraftVersion: string;
   color: string;
+  iconData: string | null;
   javaVersion: JavaVersion;
   ramMb: number;
   jvmArgs: string;
@@ -46,6 +47,7 @@ export interface ContentItem {
   installedAt: number;
   updateCheckedAt: number | null;
   updateAvailable: boolean;
+  fromModpack: boolean;
 }
 
 export interface JavaRuntime {
@@ -95,7 +97,34 @@ export interface McAccount {
   addedAt: number;
 }
 
-export type CreateStep = "loader" | "version" | "loader_version" | "color" | "confirm";
+export type CreateStep =
+  | "source"
+  | "loader" | "version" | "loader_version" | "color" | "confirm"
+  | "modpack_search" | "modpack_version";
+
+export interface ModpackVersionInfo {
+  versionId: string;
+  versionName: string;
+  mcVersions: string[];
+  loaderType: string;
+  fileUrl: string;
+  fileSize: number;
+}
+
+export interface InstalledMod {
+  filename: string;
+  modrinthProjectId: string | null;
+  modrinthVersionId: string | null;
+}
+
+export interface MrpackInstallResult {
+  name: string;
+  mcVersion: string;
+  loaderType: string;
+  loaderVersion: string;
+  iconData: string | null;
+  installedMods: InstalledMod[];
+}
 
 export interface FileEntry {
   name: string;
@@ -133,6 +162,7 @@ export interface WorldInfo {
   levelName: string;
   gameMode: string;
   lastPlayedMs: number | null;
+  icon: string | null;
   mcVersion: string | null;
 }
 

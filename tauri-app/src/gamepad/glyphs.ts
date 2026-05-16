@@ -20,7 +20,7 @@ const glyphMap = {
     lb: "plain-L1",    rb: "plain-R1",
     lt: "plain-L2",    rt: "plain-R2",
     l3: "plain-L3",
-    start: "plain-small-option",
+    start: "plain-big-option",
   },
   switch: {
     south: "b",        east: "a",       west: "y",     north: "x",    dpad: "dpad",
@@ -54,6 +54,7 @@ export function inputToGlyph(input: string, ct: ControllerType): LogicalButton |
     case "RB":  return "rb";
     case "L2":  return "lt";
     case "R2":  return "rt";
+    case "START": return "start";
     default:    return null;
   }
 }

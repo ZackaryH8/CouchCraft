@@ -20,7 +20,7 @@ import { useAuth } from "./hooks/useAuth";
 import { Sidebar } from "./components/Sidebar";
 import { OSK } from "./components/OSK";
 import { GamepadGlyph } from "./components/GamepadGlyph";
-import type { ControllerType } from "./gamepad/glyphs";
+import { inputToGlyph, type ControllerType } from "./gamepad/glyphs";
 import type { HapticGamepad } from "./types";
 import { buildSettingsSections } from "./constants";
 import { formatLastPlayed } from "./utils/format";
@@ -41,7 +41,7 @@ function App() {
     toggleFullscreen, toggleMotionReduced, toggleVibration,
   } = useSettings();
   const controllerType: ControllerType = controllerLayout;
-  const { isLaunching, launchingName, progress, launchError, launchInstance, dismissError } = useLauncher({
+  const { isLaunching, isGameRunning, launchingName, progress, launchError, launchInstance, dismissError, forceUnlock } = useLauncher({
     onLaunched: (id) => void reloadInstance(id),
     onGameExited: (id) => void reloadInstance(id),
   });
@@ -55,6 +55,22 @@ function App() {
 
   const sidebar = useSidebar({ reset, toPage, toSidebar });
   const osk = useOSK();
+
+  // Hold START for 5 s while game is running to force-unlock the UI
+  const HOLD_DURATION_MS = 5000;
+  const [unlockProgress, setUnlockProgress] = useState(0); // 0–1
+  const holdStartRef = useRef<number | null>(null);
+  const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearUnlockHold = useCallback(() => {
+    holdStartRef.current = null;
+    if (holdIntervalRef.current) { clearInterval(holdIntervalRef.current); holdIntervalRef.current = null; }
+    setUnlockProgress(0);
+  }, []);
+
+  useEffect(() => {
+    if (!isGameRunning) clearUnlockHold();
+  }, [isGameRunning, clearUnlockHold]);
 
   // ── page hooks (always mounted so state survives nav) ─────────────────────
   const settingsSections = useMemo(
@@ -193,6 +209,18 @@ function App() {
   // ── input routing ─────────────────────────────────────────────────────────
   const handleInput = useCallback(
     (input: Parameters<typeof home.handleInput>[0]) => {
+      if (isGameRunning) {
+        if (input === "START" && holdStartRef.current === null) {
+          holdStartRef.current = Date.now();
+          holdIntervalRef.current = setInterval(() => {
+            const elapsed = Date.now() - (holdStartRef.current ?? Date.now());
+            const p = Math.min(elapsed / HOLD_DURATION_MS, 1);
+            setUnlockProgress(p);
+            if (p >= 1) { clearUnlockHold(); forceUnlock(); }
+          }, 50);
+        }
+        return;
+      }
       if (launchError) { if (input === "B" || input === "A") dismissError(); return; }
       if (osk.isOpenRef.current) { osk.handleInput(input); return; }
       if (vibrationEnabled && ["UP", "DOWN", "LEFT", "RIGHT"].includes(input)) {
@@ -207,10 +235,14 @@ function App() {
       else if (current.id === "account") accountPage.handleInput(input);
       else if (current.id === "updates") updatesPage.handleInput(input);
     },
-    [launchError, dismissError, osk.handleInput, vibrationEnabled, playUiMoveRumble, globalFocus, current.id, sidebar, home, settings, createPage, library, instancePage, accountPage, updatesPage],
+    [isGameRunning, forceUnlock, clearUnlockHold, launchError, dismissError, osk.handleInput, vibrationEnabled, playUiMoveRumble, globalFocus, current.id, sidebar, home, settings, createPage, library, instancePage, accountPage, updatesPage],
   );
 
-  useGamepad(handleInput);
+  const handleRelease = useCallback((input: Parameters<typeof handleInput>[0]) => {
+    if (input === "START") clearUnlockHold();
+  }, [clearUnlockHold]);
+
+  useGamepad(handleInput, handleRelease);
 
   // ── page header ───────────────────────────────────────────────────────────
   const instanceName = current.id === "instance"
@@ -269,6 +301,40 @@ function App() {
     >
       {showSplash && <SplashScreen onDone={() => setShowSplash(false)} />}
       {osk.isOpen && <OSK value={osk.value} cursorPos={osk.cursorPos} focus={osk.focus} isShift={osk.isShift} flashKey={osk.flashKey} controllerType={controllerType} />}
+      {isGameRunning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
+          <div className="simple-panel flex min-w-[40rem] flex-col items-center gap-6 rounded-[2rem] px-14 py-12 text-center">
+            <div className="flex items-center gap-3">
+              <div className="h-3 w-3 animate-pulse rounded-full bg-lime-300" />
+              <p className="text-xs font-semibold uppercase tracking-[0.5em] text-lime-300/70">Game Running</p>
+            </div>
+            <div className="space-y-2">
+              <h1 className="font-display text-4xl text-white">Controls Locked</h1>
+              <p className="text-lg text-stone-400">The launcher is paused while Minecraft is open.</p>
+            </div>
+            <div className="w-full space-y-3">
+              <div className="flex items-center justify-center gap-2 text-sm text-stone-500">
+                {unlockProgress > 0 ? (
+                  <span>Keep holding…</span>
+                ) : (
+                  <>
+                    <span>Hold</span>
+                    {(() => { const g = inputToGlyph("START", controllerType); return g ? <GamepadGlyph controller={controllerType} button={g} size={28} /> : null; })()}
+                    <span>for 5 seconds to force unlock</span>
+                  </>
+                )}
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-lime-300 transition-none"
+                  style={{ width: `${unlockProgress * 100}%`, opacity: unlockProgress > 0 ? 1 : 0 }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isLaunching && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
           <div className="simple-panel flex min-w-[36rem] flex-col items-center gap-6 rounded-[2rem] px-14 py-12 text-center">
@@ -439,9 +505,20 @@ function App() {
                   showOnlyStable={createPage.showOnlyStable}
                   isLoadingMcVersions={versionsLoading}
                   isLoadingLoaderVersions={createPage.isLoadingLoaderVersions}
+                  modpackQuery={createPage.modpackQuery}
+                  modpackResults={createPage.modpackResults}
+                  modpackLoading={createPage.modpackLoading}
+                  selectedModpack={createPage.selectedModpack}
+                  modpackVersions={createPage.modpackVersions}
+                  modpackVersionsLoading={createPage.modpackVersionsLoading}
+                  isInstalling={createPage.isInstalling}
+                  installProgress={createPage.installProgress}
+                  installError={createPage.installError}
                   hasFocus={globalFocus === "page"}
+                  controllerType={controllerType}
                   onMoveFocus={createPage.onMoveFocus}
                   onSelect={createPage.onSelect}
+                  onDismissError={createPage.onDismissError}
                 />
               )}
 

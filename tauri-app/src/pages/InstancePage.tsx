@@ -10,6 +10,7 @@ import { useServersTab, type ServersTabState } from "../hooks/useServersTab";
 import { useLogsTab, type LogsTabState, type LogFilter } from "../hooks/useLogsTab";
 import { GamepadGlyph } from "../components/GamepadGlyph";
 import { inputToGlyph, type ControllerType } from "../gamepad/glyphs";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -304,8 +305,8 @@ function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
     );
   };
   const {
-    items, view, installedIndex, searchResults, isSearching,
-    browseIndex, versionOverlay, deleteOverlay, isInstalling,
+    items, installedProjectIds, view, installedIndex, searchResults, isSearching,
+    browseIndex, versionOverlay, deleteOverlay, deleteChoice, isInstalling,
     onSelectInstalled, onSelectBrowse, onOpenBrowse, onOpenSearch,
   } = tab;
 
@@ -395,23 +396,20 @@ function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
 
       {/* ── Delete confirm overlay ──────────────────────────────────────── */}
       {deleteOverlay && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[2rem] bg-black/70 backdrop-blur-sm">
-          <div className="simple-panel w-[32rem] rounded-[2rem] px-10 py-9">
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-red-400/80">Confirm Delete</p>
-            <h2 className="mt-3 font-display text-4xl tracking-[-0.05em] text-white">Delete?</h2>
-            <p className="mt-3 text-lg leading-7 text-stone-400">
-              "{deleteOverlay.name}" will be permanently removed.
-            </p>
-            <div className="mt-8 flex gap-4">
-              <div className="flex-1 rounded-[1.25rem] border border-lime-300/60 bg-lime-300 px-6 py-4 text-center">
-                <p className="text-xl font-semibold text-slate-950">Cancel (B)</p>
-              </div>
-              <div className="flex-1 rounded-[1.25rem] border border-red-400/50 bg-red-950 px-6 py-4 text-center">
-                <p className="text-xl font-semibold text-red-200">Delete (A)</p>
-              </div>
+        <ConfirmDialog
+          title="Delete?"
+          message={`"${deleteOverlay.name}" will be permanently removed.`}
+          choice={deleteChoice}
+          confirmLabel="Delete"
+          warning={deleteOverlay.fromModpack ? (
+            <div className="rounded-[1rem] border border-amber-400/30 bg-amber-950/40 px-4 py-3">
+              <p className="text-sm font-semibold text-amber-300">Part of modpack</p>
+              <p className="mt-1 text-sm text-amber-200/70">
+                This mod was installed as part of the modpack. Removing it may break things or cause crashes.
+              </p>
             </div>
-          </div>
-        </div>
+          ) : undefined}
+        />
       )}
 
       {/* ── Main content ────────────────────────────────────────────────── */}
@@ -478,10 +476,17 @@ function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
                         {item.enabled ? "Enabled" : "Disabled"}
                       </p>
                     </div>
-                    {/* Source badge */}
-                    <span className="shrink-0 rounded-[0.6rem] border border-white/8 bg-white/[0.04] px-2.5 py-1 text-xs font-semibold text-stone-500">
-                      {item.source}
-                    </span>
+                    {/* Badges */}
+                    <div className="flex shrink-0 gap-1.5">
+                      {item.fromModpack && (
+                        <span className="rounded-[0.6rem] border border-amber-400/30 bg-amber-950/40 px-2.5 py-1 text-xs font-semibold text-amber-300">
+                          modpack
+                        </span>
+                      )}
+                      <span className="rounded-[0.6rem] border border-white/8 bg-white/[0.04] px-2.5 py-1 text-xs font-semibold text-stone-500">
+                        {item.source}
+                      </span>
+                    </div>
                     {/* Hint when selected */}
                     {isSelected && (
                       <div className="flex shrink-0 items-center gap-2 text-xs text-stone-600">
@@ -525,6 +530,7 @@ function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
             <div className="flex flex-col gap-2 overflow-y-auto">
               {searchResults.map((hit, i) => {
                 const isSelected = hasFocus && i === browseIndex;
+                const alreadyInstalled = installedProjectIds.has(hit.projectId);
                 return (
                   <div
                     key={hit.projectId}
@@ -532,6 +538,8 @@ function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
                     onClick={() => onSelectBrowse(i)}
                     onMouseEnter={() => onSelectBrowse(i)}
                     className={`flex cursor-default items-start gap-4 rounded-[1.25rem] border px-5 py-4 transition duration-200 ${
+                      alreadyInstalled ? "opacity-70" : ""
+                    } ${
                       isSelected ? "border-lime-300/60 bg-[#171c1a]" : "border-white/8 bg-[#121514]"
                     }`}
                   >
@@ -556,20 +564,28 @@ function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
                       <p className="mt-0.5 line-clamp-1 text-sm text-stone-500">{hit.description}</p>
                     </div>
 
-                    {/* Downloads */}
+                    {/* Downloads + installed badge */}
                     <div className="shrink-0 text-right">
-                      <p className="text-sm font-semibold text-stone-300">
-                        {hit.downloads >= 1_000_000
-                          ? `${(hit.downloads / 1_000_000).toFixed(1)}M`
-                          : hit.downloads >= 1_000
-                            ? `${(hit.downloads / 1_000).toFixed(0)}K`
-                            : String(hit.downloads)}
-                      </p>
-                      <p className="mt-0.5 text-xs text-stone-600">downloads</p>
+                      {installedProjectIds.has(hit.projectId) ? (
+                        <span className="inline-block rounded-[0.5rem] border border-lime-300/40 bg-lime-300/10 px-2.5 py-1 text-xs font-semibold text-lime-300">
+                          Installed
+                        </span>
+                      ) : (
+                        <>
+                          <p className="text-sm font-semibold text-stone-300">
+                            {hit.downloads >= 1_000_000
+                              ? `${(hit.downloads / 1_000_000).toFixed(1)}M`
+                              : hit.downloads >= 1_000
+                                ? `${(hit.downloads / 1_000).toFixed(0)}K`
+                                : String(hit.downloads)}
+                          </p>
+                          <p className="mt-0.5 text-xs text-stone-600">downloads</p>
+                        </>
+                      )}
                     </div>
 
                     {/* Select hint */}
-                    {isSelected && (
+                    {isSelected && !alreadyInstalled && (
                       <p className="shrink-0 self-center text-xs text-stone-600">A to install</p>
                     )}
                   </div>
@@ -710,7 +726,7 @@ function FilesTabView({ tab, hasFocus, ct }: FilesTabViewProps) {
 
 // ─── worlds tab UI ────────────────────────────────────────────────────────────
 
-function WorldsTabView({ tab, hasFocus }: { tab: WorldsTabState; hasFocus: boolean }) {
+function WorldsTabView({ tab, hasFocus, ct }: { tab: WorldsTabState; hasFocus: boolean; ct: ControllerType }) {
   const { worlds, selectedIndex, isLoading, onSelectWorld, onLaunchWorld } = tab;
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   useEffect(() => { itemRefs.current[selectedIndex]?.scrollIntoView({ block: "nearest" }); }, [selectedIndex]);
@@ -721,23 +737,34 @@ function WorldsTabView({ tab, hasFocus }: { tab: WorldsTabState; hasFocus: boole
       <p className="text-sm text-stone-600">Launch the instance once to create a world.</p>
     </div>
   );
+  const aGlyph = inputToGlyph("A", ct);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-      <p className="mb-1 text-xs text-stone-600">A: Quick-play world · B: Back</p>
+      <p className="mb-1 inline-flex items-center gap-1 text-xs text-stone-600">
+        {aGlyph && <GamepadGlyph controller={ct} button={aGlyph} size={14} />} Quick-play world
+      </p>
       {worlds.map((world, i) => {
         const isSelected = hasFocus && i === selectedIndex;
         return (
           <div key={world.folder} ref={(el) => { itemRefs.current[i] = el; }} onClick={() => onSelectWorld(i)} onDoubleClick={() => onLaunchWorld(world.folder)}
             className={`flex cursor-default items-center gap-4 rounded-[1.25rem] border px-5 py-4 transition duration-200 ${isSelected ? "border-lime-300/60 bg-[#171c1a]" : "border-white/8 bg-[#121514]"}`}
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] bg-lime-300/10 text-lime-300">
-              <span className="text-base font-bold">W</span>
-            </div>
+            {world.icon ? (
+              <img src={`data:image/png;base64,${world.icon}`} alt="" className="h-10 w-10 shrink-0 rounded-[0.75rem] object-cover" />
+            ) : (
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] bg-white/[0.04] text-stone-500">
+                <span className="text-base font-bold">S</span>
+              </div>
+            )}
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold text-white">{world.levelName}</p>
               <p className="mt-0.5 text-xs text-stone-500">{world.gameMode}{world.mcVersion ? ` · ${world.mcVersion}` : ""}</p>
             </div>
-            {isSelected && <p className="shrink-0 text-xs text-stone-600">A: play</p>}
+            {isSelected && aGlyph && (
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs text-stone-600">
+                <GamepadGlyph controller={ct} button={aGlyph} size={14} /> play
+              </span>
+            )}
           </div>
         );
       })}
@@ -747,7 +774,7 @@ function WorldsTabView({ tab, hasFocus }: { tab: WorldsTabState; hasFocus: boole
 
 // ─── servers tab UI ───────────────────────────────────────────────────────────
 
-function ServersTabView({ tab, hasFocus }: { tab: ServersTabState; hasFocus: boolean }) {
+function ServersTabView({ tab, hasFocus, ct }: { tab: ServersTabState; hasFocus: boolean; ct: ControllerType }) {
   const { servers, selectedIndex, isLoading, onSelectServer, onLaunchServer } = tab;
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   useEffect(() => { itemRefs.current[selectedIndex]?.scrollIntoView({ block: "nearest" }); }, [selectedIndex]);
@@ -758,9 +785,12 @@ function ServersTabView({ tab, hasFocus }: { tab: ServersTabState; hasFocus: boo
       <p className="text-sm text-stone-600">Add servers in-game and they'll appear here.</p>
     </div>
   );
+  const aGlyph = inputToGlyph("A", ct);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-      <p className="mb-1 text-xs text-stone-600">A: Quick-connect · B: Back</p>
+      <p className="mb-1 inline-flex items-center gap-1 text-xs text-stone-600">
+        {aGlyph && <GamepadGlyph controller={ct} button={aGlyph} size={14} />} Quick-connect
+      </p>
       {servers.map((server, i) => {
         const isSelected = hasFocus && i === selectedIndex;
         return (
@@ -768,7 +798,7 @@ function ServersTabView({ tab, hasFocus }: { tab: ServersTabState; hasFocus: boo
             className={`flex cursor-default items-center gap-4 rounded-[1.25rem] border px-5 py-4 transition duration-200 ${isSelected ? "border-lime-300/60 bg-[#171c1a]" : "border-white/8 bg-[#121514]"}`}
           >
             {server.icon ? (
-              <img src={server.icon} alt="" className="h-10 w-10 shrink-0 rounded-[0.75rem] object-cover" />
+              <img src={`data:image/png;base64,${server.icon}`} alt="" className="h-10 w-10 shrink-0 rounded-[0.75rem] object-cover" />
             ) : (
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] bg-white/[0.04] text-stone-500">
                 <span className="text-base font-bold">S</span>
@@ -778,7 +808,11 @@ function ServersTabView({ tab, hasFocus }: { tab: ServersTabState; hasFocus: boo
               <p className="truncate font-semibold text-white">{server.name}</p>
               <p className="mt-0.5 font-mono text-xs text-stone-500">{server.ip}</p>
             </div>
-            {isSelected && <p className="shrink-0 text-xs text-stone-600">A: connect</p>}
+            {isSelected && aGlyph && (
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs text-stone-600">
+                <GamepadGlyph controller={ct} button={aGlyph} size={14} /> connect
+              </span>
+            )}
           </div>
         );
       })}
@@ -956,32 +990,12 @@ export function InstancePage({
 
       {/* ── Delete confirm overlay ───────────────────────────────────────── */}
       {overlay === "delete" && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[2rem] bg-black/70 backdrop-blur-sm">
-          <div className="simple-panel w-[34rem] rounded-[2rem] px-10 py-9">
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-red-400/80">Confirm Delete</p>
-            <h2 className="mt-3 font-display text-4xl tracking-[-0.05em] text-white">Delete Instance?</h2>
-            <p className="mt-3 text-lg leading-7 text-stone-400">
-              "{instance.name}" will be permanently removed including all mods, saves, and configuration.
-            </p>
-            <div className="mt-8 flex gap-4">
-              {["Cancel", "Delete"].map((label, i) => (
-                <div
-                  key={label}
-                  className={`flex-1 rounded-[1.25rem] border px-6 py-4 text-center transition duration-200 ${
-                    i === deleteChoice
-                      ? i === 1
-                        ? "border-red-400/60 bg-red-950 text-red-200"
-                        : "border-lime-300/60 bg-lime-300 text-slate-950"
-                      : "border-white/8 bg-white/[0.03] text-stone-400"
-                  }`}
-                >
-                  <p className="text-xl font-semibold">{label}</p>
-                </div>
-              ))}
-            </div>
-            <p className="mt-4 text-sm text-stone-500">Left/Right to choose · A to confirm · B to cancel</p>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Delete Instance?"
+          message={`"${instance.name}" will be permanently removed including all mods, saves, and configuration.`}
+          choice={deleteChoice}
+          confirmLabel="Delete"
+        />
       )}
 
       {/* ── Tab bar ──────────────────────────────────────────────────────── */}
@@ -1023,12 +1037,18 @@ export function InstancePage({
             <div className="relative overflow-hidden rounded-[1.75rem] border border-white/8 p-6">
               <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[var(--accent)] opacity-15 blur-3xl" />
               <div className="relative flex items-center gap-6">
-                <div
-                  className="h-24 w-24 shrink-0 rounded-[1.75rem] border border-white/10 shadow-[inset_0_1px_30px_rgba(255,255,255,0.08)]"
-                  style={{
-                    background: `linear-gradient(145deg, rgba(255,255,255,0.14), rgba(0,0,0,0.18)), ${accentColor}`,
-                  }}
-                />
+                {instance.iconData ? (
+                  <img
+                    src={`data:image/png;base64,${instance.iconData}`}
+                    alt=""
+                    className="h-24 w-24 shrink-0 rounded-[1.75rem] border border-white/10 object-cover shadow-[inset_0_1px_30px_rgba(255,255,255,0.08)]"
+                  />
+                ) : (
+                  <div
+                    className="h-24 w-24 shrink-0 rounded-[1.75rem] border border-white/10 shadow-[inset_0_1px_30px_rgba(255,255,255,0.08)]"
+                    style={{ background: `linear-gradient(145deg, rgba(255,255,255,0.14), rgba(0,0,0,0.18)), ${accentColor}` }}
+                  />
+                )}
                 <div>
                   <h2 className="font-display text-5xl tracking-[-0.06em] text-white">{instance.name}</h2>
                   <div className="mt-2 flex items-center gap-3">
@@ -1126,10 +1146,10 @@ export function InstancePage({
         <FilesTabView tab={filesTab} hasFocus={hasFocus} ct={controllerType} />
       ) : activeTab === 6 ? (
         /* Worlds tab ────────────────────────────────────────────────────── */
-        <WorldsTabView tab={worldsTab} hasFocus={hasFocus} />
+        <WorldsTabView tab={worldsTab} hasFocus={hasFocus} ct={controllerType} />
       ) : activeTab === 7 ? (
         /* Servers tab ───────────────────────────────────────────────────── */
-        <ServersTabView tab={serversTab} hasFocus={hasFocus} />
+        <ServersTabView tab={serversTab} hasFocus={hasFocus} ct={controllerType} />
       ) : activeTab === 8 ? (
         /* Logs tab ──────────────────────────────────────────────────────── */
         <LogsTabView tab={logsTab} />

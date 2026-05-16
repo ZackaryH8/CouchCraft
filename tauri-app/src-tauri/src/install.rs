@@ -113,8 +113,6 @@ struct AssetIndex {
 #[derive(Deserialize)]
 struct AssetObject {
     hash: String,
-    #[allow(dead_code)]
-    size: u64,
 }
 
 // ─── Progress events ──────────────────────────────────────────────────────────
@@ -212,7 +210,7 @@ pub async fn prepare_instance(app: tauri::AppHandle, config: PrepareConfig) -> R
         let sem2 = sem.clone();
         let app2 = app.clone();
         handles.push(tokio::spawn(async move {
-            let _permit = sem2.acquire().await.unwrap();
+            let _permit = sem2.acquire().await.map_err(|e| e.to_string())?;
             let result = download_checked(&client2, &url, &dest, sha1.as_deref()).await;
             let _ = app2.emit("prepare-progress", PrepareProgress {
                 stage: "libraries".into(),
@@ -248,7 +246,7 @@ pub async fn prepare_instance(app: tauri::AppHandle, config: PrepareConfig) -> R
             let sem2 = sem.clone();
             let app2 = app.clone();
             handles.push(tokio::spawn(async move {
-                let _permit = sem2.acquire().await.unwrap();
+                let _permit = sem2.acquire().await.map_err(|e| e.to_string())?;
                 let result = download_checked(&client2, &url, &dest, Some(&sha1)).await;
                 if i % 50 == 0 {
                     let _ = app2.emit("prepare-progress", PrepareProgress {
@@ -508,7 +506,7 @@ async fn fetch_vanilla_version(client: &Client, base: &Path, mc_version: &str) -
     let json_bytes = client.get(&entry.url).send().await.map_err(|e| e.to_string())?
         .bytes().await.map_err(|e| e.to_string())?;
 
-    std::fs::create_dir_all(json_path.parent().unwrap()).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(json_path.parent().ok_or("invalid version json path")?).map_err(|e| e.to_string())?;
     std::fs::write(&json_path, &json_bytes).map_err(|e| e.to_string())?;
 
     serde_json::from_slice(&json_bytes).map_err(|e| e.to_string())
@@ -621,7 +619,7 @@ fn maven_path(name: &str) -> String {
     }
 }
 
-async fn download_checked(client: &Client, url: &str, dest: &Path, sha1: Option<&str>) -> Result<(), String> {
+pub(crate) async fn download_checked(client: &Client, url: &str, dest: &Path, sha1: Option<&str>) -> Result<(), String> {
     if dest.exists() {
         if let Some(hash) = sha1 {
             if sha1_ok(dest, hash) { return Ok(()); }
@@ -641,7 +639,7 @@ async fn download_checked(client: &Client, url: &str, dest: &Path, sha1: Option<
     Ok(())
 }
 
-fn sha1_ok(path: &Path, expected: &str) -> bool {
+pub(crate) fn sha1_ok(path: &Path, expected: &str) -> bool {
     std::fs::read(path)
         .map(|bytes| { let mut h = Sha1::new(); h.update(&bytes); format!("{:x}", h.finalize()) == expected })
         .unwrap_or(false)

@@ -6,17 +6,19 @@ mod worlds;
 mod servers;
 mod logs;
 mod install;
+mod modpack;
 use auth::{start_device_code_flow, poll_device_code, refresh_mc_auth};
-use content::{search_modrinth, get_modrinth_best_version, download_content, delete_content_file};
+use content::{search_modrinth, get_modrinth_best_version, download_content, set_content_enabled, delete_content_file};
 use files::{list_instance_files, rename_instance_file, delete_instance_path};
 use versions::{fetch_mc_versions, fetch_loader_versions};
 use worlds::list_worlds;
 use servers::list_servers;
 use logs::{read_instance_log, get_latest_crash_report};
 use install::{prepare_instance, launch_game, detect_java_runtimes};
+use modpack::{list_modpack_versions, install_mrpack};
 use tauri_plugin_sql::{Migration, MigrationKind};
 use gilrs::{
-    ff::{BaseEffect, BaseEffectType, Effect, EffectBuilder, Replay, Ticks},
+    ff::{BaseEffect, BaseEffectType, Effect, EffectBuilder, Replay, Repeat, Ticks},
     Gilrs,
 };
 use serde::{Deserialize, Serialize};
@@ -33,18 +35,16 @@ pub struct LaunchConfig {
 }
 
 struct GamepadState {
-    gilrs: Mutex<Gilrs>,
+    gilrs: Mutex<Option<Gilrs>>,
     active_effect: Mutex<Option<Effect>>,
 }
 
 impl GamepadState {
-    fn new() -> Result<Self, String> {
-        let gilrs = Gilrs::new().map_err(|e| e.to_string())?;
-
-        Ok(Self {
-            gilrs: Mutex::new(gilrs),
+    fn new() -> Self {
+        Self {
+            gilrs: Mutex::new(Gilrs::new().ok()),
             active_effect: Mutex::new(None),
-        })
+        }
     }
 }
 
@@ -81,7 +81,8 @@ fn rumble_gamepad(
     let strong_magnitude = strong_magnitude.unwrap_or(0.2).clamp(0.0, 1.0);
     let duration = Ticks::from_ms(duration_ms.unwrap_or(30));
 
-    let mut gilrs = state.gilrs.lock().map_err(|e| e.to_string())?;
+    let mut guard = state.gilrs.lock().map_err(|e| e.to_string())?;
+    let gilrs = guard.as_mut().ok_or("gamepad subsystem unavailable")?;
     while gilrs.next_event().is_some() {}
 
     let supported_gamepads = gilrs
@@ -119,8 +120,9 @@ fn rumble_gamepad(
             },
             envelope: Default::default(),
         })
+        .repeat(Repeat::For(duration))
         .gamepads(&supported_gamepads)
-        .finish(&mut gilrs)
+        .finish(gilrs)
         .map_err(|e| e.to_string())?;
 
     effect.play().map_err(|e| e.to_string())?;
@@ -153,7 +155,7 @@ async fn create_instance_dirs(app: tauri::AppHandle, instance_id: String) -> Res
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let gamepad_state = GamepadState::new().expect("failed to initialize gilrs");
+    let gamepad_state = GamepadState::new();
 
     let migrations = vec![
         Migration {
@@ -199,6 +201,18 @@ pub fn run() {
             kind: MigrationKind::Up,
         },
         Migration {
+            version: 4,
+            description: "instance_icon_data",
+            sql: "ALTER TABLE instances ADD COLUMN icon_data TEXT;",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 5,
+            description: "content_from_modpack",
+            sql: "ALTER TABLE content ADD COLUMN from_modpack INTEGER NOT NULL DEFAULT 0;",
+            kind: MigrationKind::Up,
+        },
+        Migration {
             version: 2,
             description: "instance_v2_content_java",
             sql: "
@@ -239,7 +253,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .setup(|app| {
-            let window = app.get_webview_window("main").unwrap();
+            let window = app.get_webview_window("main")
+                .ok_or("main webview window not found")?;
 
             let size = window.current_monitor().ok().flatten().map(|m| {
                 let s = m.size();
@@ -279,6 +294,7 @@ pub fn run() {
             search_modrinth,
             get_modrinth_best_version,
             download_content,
+            set_content_enabled,
             delete_content_file,
             list_instance_files,
             rename_instance_file,
@@ -293,6 +309,8 @@ pub fn run() {
             start_device_code_flow,
             poll_device_code,
             refresh_mc_auth,
+            list_modpack_versions,
+            install_mrpack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

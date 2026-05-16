@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   loadContent,
@@ -36,6 +36,7 @@ interface VersionOverlay {
 
 export interface ContentTabState {
   items: ContentItem[];
+  installedProjectIds: Set<string>;
   view: ContentView;
   installedIndex: number;
   searchResults: ModrinthHit[];
@@ -43,6 +44,7 @@ export interface ContentTabState {
   browseIndex: number;
   versionOverlay: VersionOverlay | null;
   deleteOverlay: ContentItem | null;
+  deleteChoice: number;
   isInstalling: boolean;
   handleInput: (input: GamepadInput) => boolean;
   onSelectInstalled: (i: number) => void;
@@ -82,6 +84,7 @@ export function useContentTab({
   const [browseIndex, setBrowseIndex]         = useState(0);
   const [versionOverlay, setVersionOverlay]   = useState<VersionOverlay | null>(null);
   const [deleteOverlay, setDeleteOverlay]     = useState<ContentItem | null>(null);
+  const [deleteChoice, setDeleteChoice]       = useState(0); // 0 = Cancel, 1 = Delete
   const [isInstalling, setIsInstalling]       = useState(false);
   const searchQueryRef                        = useRef("");
 
@@ -179,6 +182,7 @@ export function useContentTab({
         installedAt:       Math.floor(Date.now() / 1000),
         updateCheckedAt:   null,
         updateAvailable:   false,
+        fromModpack:       false,
       };
       await insertContent(item);
       setItems((prev) =>
@@ -213,6 +217,12 @@ export function useContentTab({
 
   const toggleItem = useCallback(async (item: ContentItem) => {
     const next = !item.enabled;
+    await invoke("set_content_enabled", {
+      instanceId: item.instanceId,
+      filename:   item.filename,
+      category:   item.category,
+      enabled:    next,
+    });
     await setContentEnabled(item.id, next);
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, enabled: next } : i)),
@@ -234,8 +244,15 @@ export function useContentTab({
 
       // ── delete overlay ────────────────────────────────────────────────────
       if (deleteOverlay) {
-        if (input === "A") void confirmDelete(deleteOverlay);
-        else if (input === "B") setDeleteOverlay(null);
+        switch (input) {
+          case "LEFT":  setDeleteChoice(0); break;
+          case "RIGHT": setDeleteChoice(1); break;
+          case "A":
+            if (deleteChoice === 1) void confirmDelete(deleteOverlay);
+            else setDeleteOverlay(null);
+            break;
+          case "B": setDeleteOverlay(null); break;
+        }
         return true;
       }
 
@@ -250,7 +267,7 @@ export function useContentTab({
             return true;
           case "A": {
             const hit = searchResults[browseIndex];
-            if (hit) void selectResult(hit);
+            if (hit && !installedProjectIds.has(hit.projectId)) void selectResult(hit);
             return true;
           }
           case "X":
@@ -278,7 +295,7 @@ export function useContentTab({
         }
         case "Y": {
           const item = items[installedIndex];
-          if (item) setDeleteOverlay(item);
+          if (item) { setDeleteChoice(0); setDeleteOverlay(item); }
           return true;
         }
         case "X":
@@ -294,8 +311,14 @@ export function useContentTab({
     ],
   );
 
+  const installedProjectIds = useMemo(
+    () => new Set(items.map((i) => i.modrinthProjectId).filter((id): id is string => id !== null)),
+    [items],
+  );
+
   return {
     items,
+    installedProjectIds,
     view,
     installedIndex,
     searchResults,
@@ -303,6 +326,7 @@ export function useContentTab({
     browseIndex,
     versionOverlay,
     deleteOverlay,
+    deleteChoice,
     isInstalling,
     handleInput,
     onSelectInstalled: setInstalledIndex,

@@ -194,7 +194,7 @@ export function useOSK() {
           case "DOWN":
             if (row < MAIN_ROWS.length - 1) {
               const nr = row + 1;
-              // Spacebar row has only one key — col resets to 0
+              // Spacebar row has only one key — col resets to 0https://github.com/InventivetalentDev/minecraft-assets/tree/1.21.8
               const nc = nr === 4 ? 0 : Math.min(col, MAIN_ROWS[nr].length - 1);
               setFocus((f) => ({ ...f, row: nr, col: nc }));
             }

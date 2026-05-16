@@ -260,6 +260,37 @@ pub async fn download_content(
 }
 
 #[tauri::command]
+pub async fn set_content_enabled(
+    app: tauri::AppHandle,
+    instance_id: String,
+    filename: String,
+    category: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let subdir   = content_subdir(&category)?;
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let dir = data_dir
+        .join("instances")
+        .join(&instance_id)
+        .join(".minecraft")
+        .join(subdir);
+
+    let active   = dir.join(&filename);
+    let disabled = dir.join(format!("{}.disabled", filename));
+
+    if enabled {
+        if disabled.exists() {
+            std::fs::rename(&disabled, &active)
+                .map_err(|e| format!("Enable error: {e}"))?;
+        }
+    } else if active.exists() {
+        std::fs::rename(&active, &disabled)
+            .map_err(|e| format!("Disable error: {e}"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn delete_content_file(
     app: tauri::AppHandle,
     instance_id: String,
@@ -268,15 +299,19 @@ pub async fn delete_content_file(
 ) -> Result<(), String> {
     let subdir   = content_subdir(&category)?;
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let path = data_dir
+    let dir = data_dir
         .join("instances")
         .join(&instance_id)
         .join(".minecraft")
-        .join(subdir)
-        .join(&filename);
+        .join(subdir);
 
-    if path.exists() {
-        std::fs::remove_file(&path).map_err(|e| format!("Delete error: {e}"))?;
+    let active   = dir.join(&filename);
+    let disabled = dir.join(format!("{}.disabled", filename));
+
+    if active.exists() {
+        std::fs::remove_file(&active).map_err(|e| format!("Delete error: {e}"))?;
+    } else if disabled.exists() {
+        std::fs::remove_file(&disabled).map_err(|e| format!("Delete error: {e}"))?;
     }
     Ok(())
 }

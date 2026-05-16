@@ -74,7 +74,7 @@ export function useFilesTab({
     setSelectedIndex(0);
     setDeleteOverlay(null);
     void loadDir("");
-  }, [instanceId, isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [instanceId, isActive]); // intentional: loadDir excluded — its identity changes with instanceId which is already a dep // eslint-disable-line react-hooks/exhaustive-deps
 
   const confirmDelete = useCallback(
     async (entry: FileEntry) => {

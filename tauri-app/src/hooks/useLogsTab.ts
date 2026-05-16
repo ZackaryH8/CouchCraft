@@ -36,7 +36,7 @@ export function useLogsTab(instanceId: string | null, isActive: boolean): LogsTa
       setRawLog("");
       setCrash(null);
     }).finally(() => setIsLoading(false));
-  }, [instanceId, isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [instanceId, isActive]); // intentional: setState fns are stable refs and not needed as deps // eslint-disable-line react-hooks/exhaustive-deps
 
   const FILTERS: LogFilter[] = ["all", "info", "warn", "error"];
 
@@ -56,7 +56,7 @@ export function useLogsTab(instanceId: string | null, isActive: boolean): LogsTa
     if (input === "Y" && crashReport) { setShowCrash(true); return true; }
     if (input === "B") return false;
     return false;
-  }, [showCrash, crashReport]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showCrash, crashReport]); // intentional: FILTERS is a stable constant, not a dep // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     rawLog, filter, crashReport, showCrash, isLoading,

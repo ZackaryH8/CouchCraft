@@ -24,7 +24,7 @@ type ListItem = { type: "account"; account: McAccount } | { type: "add" };
 
 export function useAccountPage({
   accounts,
-  activeAccountId,
+  activeAccountId: _activeAccountId,
   signingIn,
   startSignIn,
   cancelSignIn,

@@ -48,13 +48,16 @@ function axisToDirection(x: number, y: number): GamepadInput | null {
     : y < 0 ? 'UP' : 'DOWN';
 }
 
-export function useGamepad(onInput: (input: GamepadInput) => void) {
-  const onInputRef = useRef(onInput);
+export function useGamepad(
+  onInput: (input: GamepadInput) => void,
+  onRelease?: (input: GamepadInput) => void,
+) {
+  const onInputRef   = useRef(onInput);
+  const onReleaseRef = useRef(onRelease);
   const rafRef = useRef<number>(0);
 
-  useEffect(() => {
-    onInputRef.current = onInput;
-  }, [onInput]);
+  useEffect(() => { onInputRef.current = onInput; }, [onInput]);
+  useEffect(() => { onReleaseRef.current = onRelease; }, [onRelease]);
 
   useEffect(() => {
     if (isTauri()) {
@@ -115,6 +118,8 @@ export function useGamepad(onInput: (input: GamepadInput) => void) {
             heldButton.v = null;
             clearHold();
           }
+          const input = PLUGIN_BUTTON_TO_INPUT[buttonName];
+          if (input) onReleaseRef.current?.(input);
         };
 
         await execute((payload: PluginGamepadPayload) => {
@@ -222,7 +227,9 @@ export function useGamepad(onInput: (input: GamepadInput) => void) {
         else if (gp.buttons[10]?.pressed) input = 'L3';
 
         if (input !== held.input) {
+          const prev = held.input;
           held.input = input;
+          if (prev) onReleaseRef.current?.(prev);
           if (input) {
             held.holdStart = now;
             held.lastRepeat = now;
