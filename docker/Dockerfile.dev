@@ -1,0 +1,32 @@
+ARG BASE_APP_IMAGE=ghcr.io/games-on-whales/base-app:edge
+
+# hadolint ignore=DL3006
+FROM ${BASE_APP_IMAGE}
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Install runtime deps that the .deb would pull in automatically
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+    libwebkit2gtk-4.1-0 \
+    librsvg2-2 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libx11-6 \
+    libwayland-client0 \
+    libwayland-egl1 \
+    libxkbcommon0 \
+    shared-mime-info \
+    xdg-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Raw binary dropped in by build-dev.sh
+COPY couchcraft /usr/bin/couchcraft
+
+COPY --chmod=777 scripts/startup.sh /opt/gow/startup-app.sh
+
+ENV XDG_RUNTIME_DIR=/tmp/.X11-unix
+ENV GDK_SCALE=1
+ENV GDK_DPI_SCALE=1
+
+LABEL org.opencontainers.image.title="CouchCraft (dev)"

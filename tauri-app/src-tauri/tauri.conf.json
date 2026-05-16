@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tauri-app",
+  "productName": "couchcraft",
   "version": "0.1.0",
-  "identifier": "com.zack.tauri-app",
+  "identifier": "com.couchcraft.launcher",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,8 +13,9 @@
     "windows": [
       {
         "title": "CouchCraft Launcher",
-        "width": 800,
-        "height": 600
+        "resizable": false,
+        "decorations": false,
+        "fullscreen": true
       }
     ],
     "security": {
