@@ -3,29 +3,48 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useGamepad } from "./hooks/useGamepad";
 import { useNavStack } from "./hooks/useNavStack";
 import { useInstances } from "./hooks/useInstances";
+import { useVersionData } from "./hooks/useVersionData";
 import { useSettings } from "./hooks/useSettings";
 import { useLauncher } from "./hooks/useLauncher";
 import { useSidebar } from "./hooks/useSidebar";
 import { useUiSound } from "./hooks/useUiSound";
+import { useViewportScale } from "./hooks/useViewportScale";
 import { useHomePage, HomePage } from "./pages/HomePage";
 import { useSettingsPage, SettingsPage } from "./pages/SettingsPage";
 import { useCreatePage, CreateInstancePage } from "./pages/CreateInstancePage";
 import { useLibraryPage, LibraryPage } from "./pages/LibraryPage";
 import { useAccountPage, AccountPage } from "./pages/AccountPage";
+import { useUpdatesPage, UpdatesPage } from "./pages/UpdatesPage";
+import { useInstancePage, InstancePage } from "./pages/InstancePage";
 import { useAuth } from "./hooks/useAuth";
 import { Sidebar } from "./components/Sidebar";
+import { OSK } from "./components/OSK";
 import { GamepadGlyph } from "./components/GamepadGlyph";
 import type { ControllerType } from "./gamepad/glyphs";
 import type { HapticGamepad } from "./types";
 import { buildSettingsSections } from "./constants";
-
-const controllerType: ControllerType = "xbox";
+import { formatLastPlayed } from "./utils/format";
+import { SplashScreen } from "./components/SplashScreen";
+import { useOSK } from "./hooks/useOSK";
 
 function App() {
+  const scale = useViewportScale();
+  const [showSplash, setShowSplash] = useState(true);
+
   // ── data & settings ──────────────────────────────────────────────────────
-  const { instances, loading, createInstance, updateInstance, removeInstance } = useInstances();
-  const { uiSoundsEnabled, uiSoundVolume, toggleSounds, setVolume } = useSettings();
-  const { isLaunching, launchingName, launchInstance } = useLauncher();
+  const { instances, loading, createInstance, updateInstance, removeInstance, reloadInstance } = useInstances();
+  const { mcVersions, isLoading: versionsLoading, fetchLoaderVersions } = useVersionData();
+  const {
+    uiSoundsEnabled, uiSoundVolume, controllerLayout,
+    isFullscreen, motionReduced, vibrationEnabled,
+    toggleSounds, setVolume, toggleControllerLayout,
+    toggleFullscreen, toggleMotionReduced, toggleVibration,
+  } = useSettings();
+  const controllerType: ControllerType = controllerLayout;
+  const { isLaunching, launchingName, progress, launchError, launchInstance, dismissError } = useLauncher({
+    onLaunched: (id) => void reloadInstance(id),
+    onGameExited: (id) => void reloadInstance(id),
+  });
   const { playSound } = useUiSound({ enabled: uiSoundsEnabled, volume: uiSoundVolume });
 
   // ── navigation ───────────────────────────────────────────────────────────
@@ -35,43 +54,89 @@ function App() {
   const toPage = useCallback(() => setGlobalFocus("page"), []);
 
   const sidebar = useSidebar({ reset, toPage, toSidebar });
+  const osk = useOSK();
 
   // ── page hooks (always mounted so state survives nav) ─────────────────────
   const settingsSections = useMemo(
-    () => buildSettingsSections(uiSoundsEnabled, uiSoundVolume),
-    [uiSoundsEnabled, uiSoundVolume],
+    () => buildSettingsSections(uiSoundsEnabled, uiSoundVolume, controllerLayout, motionReduced, vibrationEnabled, isFullscreen),
+    [uiSoundsEnabled, uiSoundVolume, controllerLayout, motionReduced, vibrationEnabled, isFullscreen],
   );
 
   const auth = useAuth();
 
-  const home = useHomePage({ instances, launchInstance, toSidebar, push });
+  // Bind active account so page hooks don't need to know about auth
+  const launch = useCallback(
+    (instance: Parameters<typeof launchInstance>[0], opts?: Parameters<typeof launchInstance>[2]) =>
+      launchInstance(instance, auth.activeAccount, opts),
+    [launchInstance, auth.activeAccount],
+  );
+
+  const home = useHomePage({ instances, launchInstance: launch, toSidebar, push });
   const settings = useSettingsPage({
     sections: settingsSections,
     toSidebar,
     uiSoundsEnabled,
     uiSoundVolume,
+    controllerLayout,
+    motionReduced,
+    vibrationEnabled,
+    isFullscreen,
     toggleSounds,
+    toggleControllerLayout,
+    toggleMotionReduced,
+    toggleVibration,
+    toggleFullscreen,
     setVolume,
   });
-  const createPage = useCreatePage({ pop, onCreated: createInstance });
+  const createPage = useCreatePage({
+    pop,
+    onCreated: createInstance,
+    openOSK: osk.open,
+    mcVersions,
+    fetchLoaderVersions,
+  });
   const library = useLibraryPage({
     instances,
-    launchInstance,
+    launchInstance: launch,
     updateInstance,
     removeInstance,
     toSidebar,
     push,
+    openOSK: osk.open,
   });
+  const instancePage = useInstancePage({
+    instanceId: current.id === "instance" ? current.instanceId : null,
+    instances,
+    launchInstance: launch,
+    updateInstance,
+    removeInstance,
+    pop,
+    toSidebar,
+    openOSK: osk.open,
+  });
+  const updatesPage = useUpdatesPage({ toSidebar });
   const accountPage = useAccountPage({
-    status: auth.status,
-    account: auth.account,
+    accounts: auth.accounts,
+    activeAccountId: auth.activeAccountId,
+    signingIn: auth.signingIn,
     deviceCode: auth.deviceCode,
     authError: auth.authError,
     startSignIn: auth.startSignIn,
     cancelSignIn: auth.cancelSignIn,
-    signOut: auth.signOut,
+    switchAccount: auth.switchAccount,
+    removeAccount: auth.removeAccount,
     toSidebar,
   });
+
+  // ── quick actions (real state) ────────────────────────────────────────────
+  const quickActions = useMemo(
+    () => [
+      { label: "Account", value: auth.activeAccount ? auth.activeAccount.mcUsername : "Not signed in" },
+      { label: "Instances", value: `${instances.length} installed` },
+      { label: "Last Played", value: formatLastPlayed(instances[0]?.lastPlayedAt ?? null) },
+    ],
+    [auth.activeAccount, instances],
+  );
 
   // ── ui sound: play on any nav state change ────────────────────────────────
   const prevNavRef = useRef({ current, globalFocus, sidebarIndex: sidebar.sidebarIndex });
@@ -124,26 +189,38 @@ function App() {
         .catch(() => {});
     }
   }, []);
-  void playUiMoveRumble;
 
   // ── input routing ─────────────────────────────────────────────────────────
   const handleInput = useCallback(
     (input: Parameters<typeof home.handleInput>[0]) => {
+      if (launchError) { if (input === "B" || input === "A") dismissError(); return; }
+      if (osk.isOpenRef.current) { osk.handleInput(input); return; }
+      if (vibrationEnabled && ["UP", "DOWN", "LEFT", "RIGHT"].includes(input)) {
+        playUiMoveRumble();
+      }
       if (globalFocus === "sidebar") sidebar.handleInput(input);
       else if (current.id === "home") home.handleInput(input);
       else if (current.id === "settings") settings.handleInput(input);
       else if (current.id === "create") createPage.handleInput(input);
       else if (current.id === "library") library.handleInput(input);
+      else if (current.id === "instance") instancePage.handleInput(input);
       else if (current.id === "account") accountPage.handleInput(input);
+      else if (current.id === "updates") updatesPage.handleInput(input);
     },
-    [globalFocus, current.id, sidebar, home, settings, createPage, library, accountPage],
+    [launchError, dismissError, osk.handleInput, vibrationEnabled, playUiMoveRumble, globalFocus, current.id, sidebar, home, settings, createPage, library, instancePage, accountPage, updatesPage],
   );
 
   useGamepad(handleInput);
 
   // ── page header ───────────────────────────────────────────────────────────
+  const instanceName = current.id === "instance"
+    ? (instances.find((i) => i.id === current.instanceId)?.name ?? "Instance")
+    : "";
+
   const pageTitle =
-    current.id === "settings" ? (
+    current.id === "instance" ? (
+      instanceName.toUpperCase()
+    ) : current.id === "settings" ? (
       "SETTINGS"
     ) : current.id === "create" ? (
       <>
@@ -157,6 +234,10 @@ function App() {
       <>
         MICROSOFT <span className="text-lime-300">ACCOUNT</span>
       </>
+    ) : current.id === "updates" ? (
+      <>
+        UPDATES <span className="text-lime-300">&amp; ASSETS</span>
+      </>
     ) : (
       <>
         COUCH<span className="text-lime-300">CRAFT</span>
@@ -164,7 +245,9 @@ function App() {
     );
 
   const pageDesc =
-    current.id === "settings"
+    current.id === "instance"
+      ? "Manage mods, settings, files, worlds, and logs for this instance."
+      : current.id === "settings"
       ? "Launcher, display, and controller preferences."
       : current.id === "create"
         ? "Choose a loader, version, and color to add a new Minecraft instance."
@@ -172,26 +255,60 @@ function App() {
           ? "Browse, launch, recolor, and delete your Minecraft instances."
           : current.id === "account"
             ? "Sign in with Microsoft to launch Minecraft with your profile."
-            : "Browse instances, launch profiles, and manage your Minecraft setup with gamepad-friendly navigation.";
+            : current.id === "updates"
+              ? "Check for asset, library, and mod pack updates."
+              : "Browse instances, launch profiles, and manage your Minecraft setup with gamepad-friendly navigation.";
 
   // ── render ────────────────────────────────────────────────────────────────
   return (
-    <main className="h-screen overflow-hidden bg-[#0b0d0c] text-stone-100">
+    <div className="fixed inset-0 overflow-hidden bg-[#0b0d0c]">
+    <main
+      className="overflow-hidden bg-[#0b0d0c] text-stone-100"
+      data-reduced-motion={motionReduced ? "" : undefined}
+      style={{ width: 1920, height: 1080, transform: `scale(${scale})`, transformOrigin: "top left" }}
+    >
+      {showSplash && <SplashScreen onDone={() => setShowSplash(false)} />}
+      {osk.isOpen && <OSK value={osk.value} cursorPos={osk.cursorPos} focus={osk.focus} isShift={osk.isShift} flashKey={osk.flashKey} controllerType={controllerType} />}
       {isLaunching && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
-          <div className="simple-panel flex min-w-[30rem] flex-col items-center gap-6 rounded-[2rem] px-14 py-12 text-center">
+          <div className="simple-panel flex min-w-[36rem] flex-col items-center gap-6 rounded-[2rem] px-14 py-12 text-center">
             <div className="h-14 w-14 animate-spin rounded-full border-[5px] border-lime-300/90 border-t-transparent" />
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.5em] text-lime-300/60">
-                Launching
+                {progress?.stage === "done" ? "Launching" : "Preparing"}
               </p>
               <h1 className="font-display text-4xl text-white">
-                Starting {launchingName ?? "instance"}
+                {launchingName ?? "Instance"}
               </h1>
-              <p className="max-w-lg text-lg text-stone-300/75">
-                Checking files, preparing the game instance, and starting Minecraft.
-              </p>
+              {progress && progress.stage !== "done" && (
+                <div className="mt-4 w-full space-y-2">
+                  <p className="text-sm text-stone-400">{progress.message}</p>
+                  {progress.total > 1 && (
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-lime-300 transition-all duration-300"
+                        style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+          </div>
+        </div>
+      )}
+      {launchError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
+          <div className="simple-panel flex min-w-[36rem] max-w-[52rem] flex-col gap-5 rounded-[2rem] px-12 py-10">
+            <p className="text-xs font-semibold uppercase tracking-[0.5em] text-red-400/80">Launch Failed</p>
+            <p className="font-mono text-sm leading-6 text-stone-300 break-all">{launchError}</p>
+            <button
+              type="button"
+              onClick={dismissError}
+              className="mt-2 self-start rounded-[1rem] border border-white/10 bg-white/[0.05] px-6 py-3 text-sm font-semibold text-stone-300 hover:text-white"
+            >
+              Dismiss (B)
+            </button>
           </div>
         </div>
       )}
@@ -220,16 +337,20 @@ function App() {
                 <p className="text-xs font-semibold uppercase tracking-[0.35em] text-stone-500">
                   Active controller
                 </p>
-                <p className="mt-2 text-2xl font-semibold text-white">Xbox Wireless</p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {controllerType === "xbox" ? "Xbox Wireless" : "DualSense"}
+                </p>
               </div>
               <div className="simple-panel flex min-w-[20rem] flex-col rounded-[1.4rem] px-5 py-4 text-right">
                 <p className="text-xs font-semibold uppercase tracking-[0.35em] text-stone-500">
                   Microsoft account
                 </p>
-                {auth.account ? (
+                {auth.activeAccount ? (
                   <>
-                    <p className="mt-2 text-2xl font-semibold text-white">{auth.account.mcUsername}</p>
-                    <p className="mt-2 text-sm text-lime-300">Connected</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{auth.activeAccount.mcUsername}</p>
+                    <p className="mt-2 text-sm text-lime-300">
+                      {auth.accounts.length > 1 ? `${auth.accounts.length} accounts` : "Connected"}
+                    </p>
                   </>
                 ) : (
                   <p className="mt-2 text-lg font-semibold text-stone-500">Not signed in</p>
@@ -251,12 +372,14 @@ function App() {
                   activeIndex={home.activeIndex}
                   homeFocus={home.homeFocus}
                   hasFocus={globalFocus === "page"}
+                  account={auth.activeAccount}
+                  quickActions={quickActions}
                   heroRef={home.heroRef}
                   gridRef={home.gridRef}
                   instanceRefs={home.instanceRefs}
                   onMoveToHero={home.onMoveToHero}
                   onMoveToGrid={home.onMoveToGrid}
-                  onLaunch={launchInstance}
+                  onLaunch={launch}
                   onCreateNew={() => push({ id: "create" })}
                 />
               )}
@@ -303,29 +426,69 @@ function App() {
               {current.id === "create" && (
                 <CreateInstancePage
                   step={createPage.createStep}
+                  effectiveSteps={createPage.effectiveSteps}
                   focusedIndex={createPage.createItemIndex}
                   draftLoader={createPage.draftLoader}
                   draftVersion={createPage.draftVersion}
+                  draftLoaderVersion={createPage.draftLoaderVersion}
                   draftColor={createPage.draftColor}
+                  draftName={createPage.draftName}
+                  mcVersions={createPage.filteredMcVersions}
+                  loaderVersions={createPage.filteredLoaderVersions}
+                  showSnapshots={createPage.showSnapshots}
+                  showOnlyStable={createPage.showOnlyStable}
+                  isLoadingMcVersions={versionsLoading}
+                  isLoadingLoaderVersions={createPage.isLoadingLoaderVersions}
                   hasFocus={globalFocus === "page"}
                   onMoveFocus={createPage.onMoveFocus}
                   onSelect={createPage.onSelect}
                 />
               )}
 
+              {current.id === "instance" && (
+                <InstancePage
+                  instance={instancePage.instance}
+                  activeTab={instancePage.activeTab}
+                  availableTabs={instancePage.availableTabs}
+                  actionIndex={instancePage.actionIndex}
+                  overlay={instancePage.overlay}
+                  colorIndex={instancePage.colorIndex}
+                  ramIndex={instancePage.ramIndex}
+                  deleteChoice={instancePage.deleteChoice}
+                  contentTabs={instancePage.contentTabs}
+                  filesTab={instancePage.filesTab}
+                  worldsTab={instancePage.worldsTab}
+                  serversTab={instancePage.serversTab}
+                  logsTab={instancePage.logsTab}
+                  controllerType={controllerType}
+                  hasFocus={globalFocus === "page"}
+                  onSelectTab={instancePage.onSelectTab}
+                  onSelectAction={instancePage.onSelectAction}
+                />
+              )}
+
               {current.id === "account" && (
                 <AccountPage
-                  status={auth.status}
-                  account={auth.account}
+                  accounts={auth.accounts}
+                  activeAccountId={auth.activeAccountId}
+                  signingIn={auth.signingIn}
                   deviceCode={auth.deviceCode}
                   authError={auth.authError}
+                  items={accountPage.items}
+                  focusedIndex={accountPage.focusedIndex}
                   actionIndex={accountPage.actionIndex}
                   hasFocus={globalFocus === "page"}
+                  onMoveFocus={accountPage.setFocusedIndex}
+                  onSetActionIndex={accountPage.setActionIndex}
                   onSignIn={() => void auth.startSignIn()}
                   onCancel={auth.cancelSignIn}
-                  onSignOut={() => void auth.signOut()}
-                  onSelectAction={accountPage.setActionIndex}
+                  onSwitch={(id) => void auth.switchAccount(id)}
+                  onRemove={(id) => void auth.removeAccount(id)}
                 />
+              )}
+
+              {current.id === "updates" && (
+                <UpdatesPage hasFocus={globalFocus === "page"} />
               )}
             </>
           )}
@@ -343,19 +506,33 @@ function App() {
                       ? "Confirm"
                       : current.id === "library"
                         ? "Action"
-                        : current.id === "account"
+                        : current.id === "instance"
                           ? "Confirm"
-                          : "Launch"}
+                          : current.id === "account"
+                            ? "Confirm"
+                            : current.id === "updates"
+                              ? "Refresh"
+                              : "Launch"}
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 <GamepadGlyph controller={controllerType} button="east" />
                 <span>Back</span>
               </div>
-              <div className="flex items-center gap-3">
-                <GamepadGlyph controller={controllerType} button="dpad" />
-                <span>Navigate</span>
-              </div>
+              {current.id === "instance" ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <GamepadGlyph controller={controllerType} button="lb" />
+                    <GamepadGlyph controller={controllerType} button="rb" />
+                    <span>Switch Tab</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <GamepadGlyph controller={controllerType} button="dpad" />
+                  <span>Navigate</span>
+                </div>
+              )}
             </div>
             <p className="text-sm font-semibold uppercase tracking-[0.35em] text-stone-500">
               Focus: {globalFocus} · {current.id}
@@ -365,6 +542,7 @@ function App() {
         </div>
       </div>
     </main>
+    </div>
   );
 }
 

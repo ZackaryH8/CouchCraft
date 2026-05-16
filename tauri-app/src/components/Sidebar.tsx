@@ -34,20 +34,32 @@ export function Sidebar({ sidebarIndex, globalFocus, sidebarRefs, onClickItem, o
               onClick={() => onClickItem(i)}
               onMouseEnter={() => onHoverItem(i)}
               className={`cursor-default rounded-[1.4rem] border px-5 py-4 transition duration-200 ${
-                isActive
-                  ? "border-lime-300/60 bg-lime-300 text-slate-950"
-                  : "border-transparent bg-transparent text-stone-100/88"
+                item.danger
+                  ? isActive
+                    ? "border-red-400/60 bg-red-500 text-white"
+                    : "border-transparent bg-transparent text-red-400/70"
+                  : isActive
+                    ? "border-lime-300/60 bg-lime-300 text-slate-950"
+                    : "border-transparent bg-transparent text-stone-100/88"
               }`}
             >
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-2xl font-semibold tracking-[-0.03em]">{item.label}</p>
-                  <p className={`mt-1 text-sm ${isActive ? "text-slate-900/70" : "text-stone-400"}`}>
+                  <p className={`mt-1 text-sm ${
+                    item.danger
+                      ? isActive ? "text-red-100/70" : "text-red-400/50"
+                      : isActive ? "text-slate-900/70" : "text-stone-400"
+                  }`}>
                     {item.meta}
                   </p>
                 </div>
                 <div
-                  className={`h-3 w-3 rounded-full ${isActive ? "bg-slate-950" : "bg-stone-600"}`}
+                  className={`h-3 w-3 rounded-full ${
+                    item.danger
+                      ? isActive ? "bg-white" : "bg-red-400/40"
+                      : isActive ? "bg-slate-950" : "bg-stone-600"
+                  }`}
                 />
               </div>
             </div>

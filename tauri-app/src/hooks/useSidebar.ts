@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { SIDEBAR_ITEMS } from "../constants";
 import type { NavFrame } from "../types";
 import type { GamepadInput } from "./useGamepad";
@@ -13,6 +14,7 @@ function frameForLabel(label: string): NavFrame {
   if (label === "Settings") return { id: "settings" };
   if (label === "Library") return { id: "library" };
   if (label === "Account") return { id: "account" };
+  if (label === "Updates") return { id: "updates" };
   return { id: "home" };
 }
 
@@ -30,6 +32,10 @@ export function useSidebar({ reset, toPage, toSidebar }: UseSidebarOptions) {
 
   const navigate = useCallback(
     (label: string) => {
+      if (label === "Quit") {
+        if (isTauri()) void invoke("quit_app");
+        return;
+      }
       reset(frameForLabel(label));
       toPage();
     },

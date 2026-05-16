@@ -6,8 +6,9 @@ import {
   type CSSProperties,
   type MutableRefObject,
 } from "react";
-import type { GameInstance } from "../types";
-import { MICROSOFT_ACCOUNT, QUICK_ACTIONS, GRID_COLUMNS, LOADER_COLORS } from "../constants";
+import type { GameInstance, McAccount } from "../types";
+import { GRID_COLUMNS, LOADER_COLORS, LOADER_LABELS } from "../constants";
+import { formatLastPlayed, formatModCount, formatPlaytime } from "../utils/format";
 import type { GamepadInput } from "../hooks/useGamepad";
 
 // ─── hook ────────────────────────────────────────────────────────────────────
@@ -115,6 +116,8 @@ interface HomePageProps {
   activeIndex: number;
   homeFocus: "hero" | "grid";
   hasFocus: boolean;
+  account: McAccount | null;
+  quickActions: { label: string; value: string }[];
   heroRef: MutableRefObject<HTMLElement | null>;
   gridRef: MutableRefObject<HTMLElement | null>;
   instanceRefs: MutableRefObject<Array<HTMLElement | null>>;
@@ -130,6 +133,8 @@ export function HomePage({
   activeIndex,
   homeFocus,
   hasFocus,
+  account,
+  quickActions,
   heroRef,
   gridRef,
   instanceRefs,
@@ -158,22 +163,21 @@ export function HomePage({
                 Default Instance
               </span>
               <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold uppercase tracking-[0.28em] text-stone-300">
-                {selectedInstance.loader}
+                {LOADER_LABELS[selectedInstance.loaderType]}
               </span>
             </div>
             <h2 className="font-display text-5xl leading-[0.95] tracking-[-0.07em] text-white">
               {selectedInstance.name}
             </h2>
-            <p className="mt-4 text-xl text-stone-200/85">{selectedInstance.summary}</p>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-stone-300/75">
-              {selectedInstance.details}
-            </p>
+            {selectedInstance.notes && (
+              <p className="mt-4 text-xl text-stone-200/85">{selectedInstance.notes}</p>
+            )}
 
             <div className="mt-8 flex flex-wrap gap-4">
               {[
                 { label: "Minecraft", value: selectedInstance.minecraftVersion },
-                { label: "Mods", value: selectedInstance.modCount },
-                { label: "Status", value: selectedInstance.status },
+                { label: "Mods", value: formatModCount(selectedInstance.modCount) },
+                { label: "Playtime", value: formatPlaytime(selectedInstance.playTimeSecs) },
               ].map((item) => (
                 <div
                   key={item.label}
@@ -207,12 +211,12 @@ export function HomePage({
                   hasFocus && homeFocus === "hero" ? "text-slate-900/75" : "text-stone-300/70"
                 }`}
               >
-                Launch this instance with {MICROSOFT_ACCOUNT.gamertag}.{" "}
-                Last played {selectedInstance.lastPlayed}.
+                {account ? `Signed in as ${account.mcUsername}.` : "Not signed in."}{" "}
+                Last played {formatLastPlayed(selectedInstance.lastPlayedAt)}.
               </p>
             </button>
 
-            {QUICK_ACTIONS.map((action) => (
+            {quickActions.map((action) => (
               <div
                 key={action.label}
                 className="rounded-[1.2rem] border border-white/8 bg-white/[0.03] px-5 py-4"
@@ -271,9 +275,9 @@ export function HomePage({
                     />
                     <div
                      className="rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm font-semibold uppercase tracking-[0.28em]"
-                     style={LOADER_COLORS[instance.loader.toLowerCase()] ? { backgroundColor: LOADER_COLORS[instance.loader.toLowerCase()] + "20", borderColor: LOADER_COLORS[instance.loader.toLowerCase()] + "40" } : {}}
+                     style={{ backgroundColor: LOADER_COLORS[instance.loaderType] + "20", borderColor: LOADER_COLORS[instance.loaderType] + "40" }}
                     >
-                      {instance.loader}
+                      {LOADER_LABELS[instance.loaderType]}
                     </div>
                   </div>
 
@@ -284,12 +288,12 @@ export function HomePage({
                     <p className="text-lg text-stone-300/80">
                       Minecraft {instance.minecraftVersion}
                     </p>
-                    <p className="min-h-14 text-base leading-7 text-stone-400">{instance.summary}</p>
+                    <p className="min-h-14 text-base leading-7 text-stone-400">{instance.notes}</p>
                   </div>
 
                   <div className="mt-auto flex items-center justify-between pt-6 text-sm font-medium text-stone-300/85">
-                    <span>{instance.modCount}</span>
-                    <span>{instance.playtime} played</span>
+                    <span>{formatModCount(instance.modCount)}</span>
+                    <span>{formatPlaytime(instance.playTimeSecs)} played</span>
                   </div>
                 </div>
               </article>

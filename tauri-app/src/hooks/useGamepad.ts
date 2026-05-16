@@ -1,19 +1,22 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { useEffect, useRef } from 'react';
 
-export type GamepadInput = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'A' | 'B';
+export type GamepadInput =
+  | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT'
+  | 'A' | 'B' | 'X' | 'Y'
+  | 'LB' | 'RB' | 'L2' | 'R2' | 'L3' | 'START';
 
 const INITIAL_DELAY = 400;
 const REPEAT_INTERVAL = 120;
-const DIRECTIONAL: ReadonlySet<GamepadInput> = new Set(['UP', 'DOWN', 'LEFT', 'RIGHT']);
+const DIRECTIONAL: ReadonlySet<GamepadInput> = new Set(['UP', 'DOWN', 'LEFT', 'RIGHT', 'LB', 'RB']);
 
 type PluginButtonName =
-  | 'DPadUp'
-  | 'DPadDown'
-  | 'DPadLeft'
-  | 'DPadRight'
-  | 'South'
-  | 'East';
+  | 'DPadUp' | 'DPadDown' | 'DPadLeft' | 'DPadRight'
+  | 'South' | 'East' | 'North' | 'West'
+  | 'LeftTrigger' | 'RightTrigger'
+  | 'LeftTrigger2' | 'RightTrigger2'
+  | 'LeftThumb'
+  | 'Start';
 
 type PluginGamepadEvent =
   | { ButtonPressed: [PluginButtonName, unknown] }
@@ -24,12 +27,12 @@ type PluginGamepadEvent =
 type PluginGamepadPayload = { event: unknown };
 
 const PLUGIN_BUTTON_TO_INPUT: Record<PluginButtonName, GamepadInput> = {
-  DPadUp: 'UP',
-  DPadDown: 'DOWN',
-  DPadLeft: 'LEFT',
-  DPadRight: 'RIGHT',
-  South: 'A',
-  East: 'B',
+  DPadUp: 'UP',    DPadDown: 'DOWN',  DPadLeft: 'LEFT', DPadRight: 'RIGHT',
+  South: 'A',      East: 'B',         North: 'Y',       West: 'X',
+  LeftTrigger: 'LB',  RightTrigger: 'RB',
+  LeftTrigger2: 'L2', RightTrigger2: 'R2',
+  LeftThumb: 'L3',
+  Start: 'START',
 };
 
 function getActiveGamepad(): Gamepad | undefined {
@@ -88,6 +91,32 @@ export function useGamepad(onInput: (input: GamepadInput) => void) {
       void import('tauri-plugin-gamepad-api').then(async ({ execute }) => {
         if (!isActive) return;
 
+        // Per-button timestamp of last fired input. ButtonPressed and
+        // ButtonChanged both fire for the same physical press; whichever
+        // arrives first fires the input — the other is dropped because it
+        // arrives within a few ms (well inside the 80ms debounce window).
+        // Using time rather than a boolean set avoids false-blocks when
+        // analog D-pads oscillate around the 0.5 threshold mid-press.
+        const DEBOUNCE_MS = 80;
+        const lastFiredAt = new Map<PluginButtonName, number>();
+
+        const tryFire = (buttonName: PluginButtonName, input: GamepadInput) => {
+          const now = Date.now();
+          if (now - (lastFiredAt.get(buttonName) ?? 0) < DEBOUNCE_MS) return false;
+          lastFiredAt.set(buttonName, now);
+          heldButton.v = buttonName;
+          onInputRef.current(input);
+          return true;
+        };
+
+        const releaseButton = (buttonName: PluginButtonName) => {
+          lastFiredAt.delete(buttonName);
+          if (heldButton.v === buttonName) {
+            heldButton.v = null;
+            clearHold();
+          }
+        };
+
         await execute((payload: PluginGamepadPayload) => {
           if (!isActive) return;
           if (typeof payload.event === 'string' || !payload.event || typeof payload.event !== 'object') return;
@@ -98,30 +127,35 @@ export function useGamepad(onInput: (input: GamepadInput) => void) {
             const [buttonName] = event.ButtonPressed;
             const input = PLUGIN_BUTTON_TO_INPUT[buttonName];
             if (!input) return;
-
-            heldButton.v = buttonName;
-            onInputRef.current(input);
-
-            if (DIRECTIONAL.has(input)) {
+            const fired = tryFire(buttonName, input);
+            if (fired && DIRECTIONAL.has(input)) {
+              startRepeat(input, clearHold, holdTimeout, holdInterval);
+            } else if (!fired && DIRECTIONAL.has(input) && !holdTimeout.v && !holdInterval.v) {
+              // ButtonChanged already fired first but didn't start repeat yet
               startRepeat(input, clearHold, holdTimeout, holdInterval);
             }
             return;
           }
 
           if ('ButtonReleased' in event) {
-            const [buttonName] = event.ButtonReleased;
-            if (heldButton.v === buttonName) {
-              heldButton.v = null;
-              clearHold();
-            }
+            releaseButton(event.ButtonReleased[0]);
             return;
           }
 
           if ('ButtonChanged' in event) {
             const [buttonName, value] = event.ButtonChanged;
-            if (value > 0.5 && !heldButton.v) {
+            if (value > 0.5) {
               const input = PLUGIN_BUTTON_TO_INPUT[buttonName];
-              if (input) onInputRef.current(input);
+              if (input) {
+                const fired = tryFire(buttonName, input);
+                if (fired && DIRECTIONAL.has(input) && !holdTimeout.v && !holdInterval.v) {
+                  startRepeat(input, clearHold, holdTimeout, holdInterval);
+                }
+              }
+            } else if (value < 0.1) {
+              // Hysteresis: only treat near-zero as release to avoid false
+              // triggers from analog jitter around the 0.5 threshold.
+              releaseButton(buttonName);
             }
             return;
           }
@@ -130,7 +164,7 @@ export function useGamepad(onInput: (input: GamepadInput) => void) {
             const [axisName, value] = event.AxisChanged;
 
             if (axisName === 'LeftStickX' || axisName === 'LeftX') axisState.x = value;
-            else if (axisName === 'LeftStickY' || axisName === 'LeftY') axisState.y = value;
+            else if (axisName === 'LeftStickY' || axisName === 'LeftY') axisState.y = -value;
             else return;
 
             const direction = axisToDirection(axisState.x, axisState.y);
@@ -178,6 +212,14 @@ export function useGamepad(onInput: (input: GamepadInput) => void) {
         else if (gp.buttons[15]?.pressed) input = 'RIGHT';
         else if (gp.buttons[0]?.pressed) input = 'A';
         else if (gp.buttons[1]?.pressed) input = 'B';
+        else if (gp.buttons[2]?.pressed) input = 'X';
+        else if (gp.buttons[3]?.pressed) input = 'Y';
+        else if (gp.buttons[4]?.pressed) input = 'LB';
+        else if (gp.buttons[5]?.pressed) input = 'RB';
+        else if (gp.buttons[6]?.pressed) input = 'L2';
+        else if (gp.buttons[7]?.pressed) input = 'R2';
+        else if (gp.buttons[9]?.pressed) input = 'START';
+        else if (gp.buttons[10]?.pressed) input = 'L3';
 
         if (input !== held.input) {
           held.input = input;

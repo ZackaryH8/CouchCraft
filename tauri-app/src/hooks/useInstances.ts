@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { GameInstance } from "../types";
-import { loadInstances, saveInstance, deleteInstance } from "../services/db";
+import { loadInstances, insertInstance, updateInstance as dbUpdateInstance, deleteInstance } from "../services/db";
 import { MOCK_INSTANCES } from "../constants";
 
 export function useInstances() {
@@ -17,19 +17,11 @@ export function useInstances() {
 
     loadInstances()
       .then((rows) => {
-        if (rows.length === 0) {
-          return Promise.all(MOCK_INSTANCES.map((inst, i) => saveInstance(inst, i))).then(
-            () => MOCK_INSTANCES,
-          );
-        }
-        return rows;
-      })
-      .then((rows) => {
         setInstances(rows);
         setLoading(false);
       })
       .catch(() => {
-        setInstances(MOCK_INSTANCES);
+        setInstances([]);
         setLoading(false);
       });
   }, []);
@@ -37,7 +29,8 @@ export function useInstances() {
   const createInstance = useCallback(
     async (instance: GameInstance) => {
       if (isTauri()) {
-        await saveInstance(instance, instances.length).catch(console.error);
+        await insertInstance(instance, instances.length).catch(console.error);
+        await invoke("create_instance_dirs", { instanceId: instance.id }).catch(console.error);
       }
       setInstances((prev) => [...prev, instance]);
     },
@@ -48,7 +41,7 @@ export function useInstances() {
     async (updated: GameInstance) => {
       if (isTauri()) {
         const index = instances.findIndex((inst) => inst.id === updated.id);
-        await saveInstance(updated, index >= 0 ? index : instances.length).catch(console.error);
+        await dbUpdateInstance(updated, index >= 0 ? index : instances.length).catch(console.error);
       }
       setInstances((prev) => prev.map((inst) => (inst.id === updated.id ? updated : inst)));
     },
@@ -62,5 +55,13 @@ export function useInstances() {
     setInstances((prev) => prev.filter((inst) => inst.id !== id));
   }, []);
 
-  return { instances, loading, createInstance, updateInstance, removeInstance };
+  // Re-read a single instance from the DB and update in-memory state
+  const reloadInstance = useCallback(async (id: string) => {
+    if (!isTauri()) return;
+    const all = await loadInstances().catch(() => [] as GameInstance[]);
+    const fresh = all.find((i) => i.id === id);
+    if (fresh) setInstances((prev) => prev.map((i) => (i.id === id ? fresh : i)));
+  }, []);
+
+  return { instances, loading, createInstance, updateInstance, removeInstance, reloadInstance };
 }

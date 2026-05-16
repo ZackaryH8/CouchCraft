@@ -6,17 +6,28 @@ import {
   type CSSProperties,
   type MutableRefObject,
 } from "react";
-import type { GameInstance } from "../types";
-import { INSTANCE_COLORS } from "../constants";
+import type { GameInstance, NavFrame } from "../types";
+import { INSTANCE_COLORS, LOADER_LABELS } from "../constants";
+import { formatLastPlayed, formatModCount, formatPlaytime } from "../utils/format";
 import type { GamepadInput } from "../hooks/useGamepad";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
 const LIBRARY_ACTIONS = [
   {
+    id: "open" as const,
+    label: "Open",
+    description: "Manage mods, settings, worlds, and logs for this instance",
+  },
+  {
     id: "launch" as const,
     label: "Launch",
     description: "Start this instance with your Microsoft account",
+  },
+  {
+    id: "rename" as const,
+    label: "Rename",
+    description: "Change the name of this instance",
   },
   {
     id: "edit-color" as const,
@@ -41,7 +52,8 @@ interface UseLibraryPageOptions {
   updateInstance: (instance: GameInstance) => Promise<void>;
   removeInstance: (id: string) => Promise<void>;
   toSidebar: () => void;
-  push: (frame: { id: "create" }) => void;
+  push: (frame: NavFrame) => void;
+  openOSK: (initial: string, onConfirm: (value: string) => void, onCancel?: () => void) => void;
 }
 
 export function useLibraryPage({
@@ -51,6 +63,7 @@ export function useLibraryPage({
   removeInstance,
   toSidebar,
   push,
+  openOSK,
 }: UseLibraryPageOptions) {
   const listRefs = useRef<Array<HTMLElement | null>>([]);
 
@@ -177,8 +190,15 @@ export function useLibraryPage({
           break;
         case "A": {
           const action = LIBRARY_ACTIONS[actionIndex];
-          if (action.id === "launch" && selectedInstance) {
+          if (action.id === "open" && selectedInstance) {
+            push({ id: "instance", instanceId: selectedInstance.id });
+          } else if (action.id === "launch" && selectedInstance) {
             void launchInstance(selectedInstance);
+          } else if (action.id === "rename" && selectedInstance) {
+            openOSK(selectedInstance.name, (name) => {
+              const trimmed = name.trim();
+              if (trimmed) void updateInstance({ ...selectedInstance, name: trimmed });
+            });
           } else if (action.id === "edit-color" && selectedInstance) {
             const idx = Array.from(INSTANCE_COLORS).indexOf(
               selectedInstance.color as (typeof INSTANCE_COLORS)[number],
@@ -207,6 +227,7 @@ export function useLibraryPage({
       removeInstance,
       toSidebar,
       push,
+      openOSK,
     ],
   );
 
@@ -355,7 +376,7 @@ export function LibraryPage({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-lg font-semibold text-white">{instance.name}</p>
                 <p className="text-sm text-stone-500">
-                  {instance.loader} · {instance.minecraftVersion}
+                  {LOADER_LABELS[instance.loaderType]} · {instance.minecraftVersion}
                 </p>
               </div>
               {isSelected && <div className="h-2 w-2 shrink-0 rounded-full bg-lime-300" />}
@@ -424,17 +445,17 @@ export function LibraryPage({
                   {selectedInstance.name}
                 </h2>
                 <p className="mt-1 text-stone-400">
-                  {selectedInstance.loader} · Minecraft {selectedInstance.minecraftVersion}
+                  {LOADER_LABELS[selectedInstance.loaderType]} · Minecraft {selectedInstance.minecraftVersion}
                 </p>
               </div>
             </div>
 
             <div className="relative mt-5 grid grid-cols-4 gap-3">
               {[
-                { label: "Mods", value: selectedInstance.modCount },
-                { label: "Playtime", value: selectedInstance.playtime },
-                { label: "Last Played", value: selectedInstance.lastPlayed },
-                { label: "Status", value: selectedInstance.status },
+                { label: "Mods", value: formatModCount(selectedInstance.modCount) },
+                { label: "Playtime", value: formatPlaytime(selectedInstance.playTimeSecs) },
+                { label: "Last Played", value: formatLastPlayed(selectedInstance.lastPlayedAt) },
+                { label: "Java", value: `Java ${selectedInstance.javaVersion}` },
               ].map((item) => (
                 <div
                   key={item.label}
@@ -448,9 +469,9 @@ export function LibraryPage({
               ))}
             </div>
 
-            {selectedInstance.summary && (
+            {selectedInstance.notes && (
               <p className="relative mt-4 text-base leading-7 text-stone-400">
-                {selectedInstance.summary}
+                {selectedInstance.notes}
               </p>
             )}
           </div>
