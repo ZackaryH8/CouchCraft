@@ -8,15 +8,18 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 GOW_REPO="${1:-${REPO_ROOT}/../gow}"
 APP_BUILD_DIR="${GOW_REPO}/apps/couchcraft/build"
 
+# ── Read version from Cargo.toml ──────────────────────────────────────────────
+VERSION=$(grep '^version' "${REPO_ROOT}/tauri-app/src-tauri/Cargo.toml" | head -1 | sed 's/version = "\(.*\)"/\1/')
+
 # ── 1. Build the .deb package ─────────────────────────────────────────────────
-echo ">>> Building CouchCraft..."
+echo ">>> Building CouchCraft v${VERSION}..."
 cd "${REPO_ROOT}/tauri-app"
 npm ci
 npm run tauri build -- --bundles deb
 
-DEB=$(find "${REPO_ROOT}/tauri-app/src-tauri/target/release/bundle/deb" -name "*.deb" | head -1)
+DEB=$(find "${REPO_ROOT}/tauri-app/src-tauri/target/release/bundle/deb" -name "couchcraft_${VERSION}_*.deb" | head -1)
 if [[ -z "${DEB}" ]]; then
-  echo "ERROR: no .deb found in target/release/bundle/deb" >&2
+  echo "ERROR: no .deb for v${VERSION} found in target/release/bundle/deb" >&2
   exit 1
 fi
 echo ">>> Built: ${DEB}"

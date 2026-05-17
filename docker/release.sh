@@ -18,8 +18,8 @@ cd "${REPO_ROOT}/tauri-app"
 npm ci
 npm run tauri build -- --bundles deb
 
-DEB=$(find "${REPO_ROOT}/tauri-app/src-tauri/target/release/bundle/deb" -name "*.deb" | head -1)
-[[ -z "${DEB}" ]] && { echo "ERROR: no .deb found in target/release/bundle/deb" >&2; exit 1; }
+DEB=$(find "${REPO_ROOT}/tauri-app/src-tauri/target/release/bundle/deb" -name "couchcraft_${VERSION}_*.deb" | head -1)
+[[ -z "${DEB}" ]] && { echo "ERROR: no .deb for v${VERSION} found in target/release/bundle/deb" >&2; exit 1; }
 echo ">>> Built: ${DEB}"
 
 # ── 2. Stage build context into a temp dir ────────────────────────────────────
