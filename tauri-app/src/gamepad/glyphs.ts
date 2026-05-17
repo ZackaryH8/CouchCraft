@@ -40,16 +40,12 @@ export function getGlyph(
   return `/gamepad/${controller}/${fileName}.png`;
 }
 
-// Maps a GamepadInput to the LogicalButton that shows the correct physical glyph.
-// On Linux with Xbox controllers the kernel reports BTN_WEST for the physical Y button
-// and BTN_NORTH for the physical X button (opposite of the face-label positions),
-// so 'X' and 'Y' inputs need swapped glyph lookups on Xbox/Switch but not PS.
 export function inputToGlyph(input: string, ct: ControllerType): LogicalButton | null {
   switch (input) {
     case "A":   return "south";
     case "B":   return "east";
-    case "X":   return ct === "ps" ? "west"  : "north"; // physical Y on Xbox/Switch
-    case "Y":   return ct === "ps" ? "north" : "west";  // physical X on Xbox/Switch
+    case "X":   return "west";
+    case "Y":   return "north";
     case "LB":  return "lb";
     case "RB":  return "rb";
     case "L2":  return "lt";

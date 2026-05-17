@@ -902,13 +902,8 @@ fn write_options_fullscreen(game_dir: &Path) {
     let _ = std::fs::write(&path, lines.join("\n") + "\n");
 }
 
-/// Tail `log_path` until Minecraft logs that it is past the Mojang screen,
-/// or `timeout_secs` elapses. Returns true when the signal is found.
-///
-/// "Reloading ResourceManager" is the primary signal — it appears on the
-/// Render thread after OpenGL and LWJGL are fully initialised, meaning the
-/// window is composited and the game is actively rendering.
-/// "Setting user:" is a reliable early fallback (render thread just started).
+/// Tail `log_path` until Minecraft logs "Time elapsed:" — the last line
+/// logged before the main menu appears — or `timeout_secs` elapses.
 fn wait_for_game_ready(log_path: &std::path::Path, timeout_secs: u64) -> bool {
     use std::io::{BufRead, BufReader, Seek, SeekFrom};
 
@@ -930,9 +925,7 @@ fn wait_for_game_ready(log_path: &std::path::Path, timeout_secs: u64) -> bool {
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
             Ok(_) => {
-                if line.contains("Reloading ResourceManager")
-                    || line.contains("Setting user:")
-                {
+                if line.contains("Time elapsed:") {
                     return true;
                 }
             }
