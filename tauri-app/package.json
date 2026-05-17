@@ -1,7 +1,7 @@
 {
   "name": "tauri-app",
   "private": true,
-  "version": "0.1.8",
+  "version": "0.1.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-qr-code": "^2.0.21",
-    "tauri-plugin-gamepad-api": "^0.0.5"
+    "tauri-plugin-gamepad-api": "github:ZackaryH8/tauri-plugin-gamepad"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.0",

@@ -24,6 +24,7 @@ interface UseFilesTabOptions {
   instanceId: string | null;
   isActive: boolean;
   openOSK: (
+    label: string,
     initial: string,
     onConfirm: (value: string) => void,
     onCancel?: () => void,
@@ -102,7 +103,7 @@ export function useFilesTab({
   const renameEntry = useCallback(
     (entry: FileEntry) => {
       const subpath = childPath(currentPath, entry.name);
-      openOSK(entry.name, async (newName) => {
+      openOSK("Rename", entry.name, async (newName) => {
         const trimmed = newName.trim();
         if (!trimmed || trimmed === entry.name || !instanceId) return;
         try {

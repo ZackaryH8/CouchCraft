@@ -3,6 +3,7 @@ import { GamepadGlyph } from "./GamepadGlyph";
 import type { ControllerType, LogicalButton } from "../gamepad/glyphs";
 
 interface OSKProps {
+  label: string;
   value: string;
   cursorPos: number;
   focus: OskFocus;
@@ -47,7 +48,7 @@ function sideRowBase(active: boolean) {
   return              "flex w-full items-center justify-center gap-2 rounded-[0.9rem] border border-white/8 bg-white/[0.04] text-stone-300 font-semibold text-sm transition-colors duration-100";
 }
 
-export function OSK({ value, cursorPos, focus, isShift, flashKey, controllerType }: OSKProps) {
+export function OSK({ label, value, cursorPos, focus, isShift, flashKey, controllerType }: OSKProps) {
   const mainActive = (r: number, c: number) =>
     focus.section === "main" && focus.row === r && focus.col === c;
   const leftActive  = (i: number) => (focus.section === "left"  && focus.sideIdx === i) || (i === 0 && flashKey === "cur_left")  || (i === 1 && flashKey === "caps");
@@ -67,7 +68,7 @@ export function OSK({ value, cursorPos, focus, isShift, flashKey, controllerType
         {/* Value display */}
         <div className="mb-5 rounded-[1.25rem] border border-white/10 bg-black/30 px-6 py-4">
           <p className="text-xs font-semibold uppercase tracking-[0.35em] text-stone-500">
-            Instance Name
+            {label}
           </p>
           <p className="mt-2 min-h-10 whitespace-pre font-mono text-3xl tracking-tight text-white">
             {value.length === 0 ? (
@@ -147,15 +148,6 @@ export function OSK({ value, cursorPos, focus, isShift, flashKey, controllerType
               <span>Enter</span>
             </div>
           </div>
-
-        </div>
-
-        {/* Hints */}
-        <div className="mt-4 flex justify-center gap-8 text-sm text-stone-600">
-          <span>A — type</span>
-          <span>L1/LB · R1/RB — text cursor</span>
-          <span>L2/L3 — caps</span>
-          <span>R2/Start — confirm</span>
         </div>
       </div>
     </div>

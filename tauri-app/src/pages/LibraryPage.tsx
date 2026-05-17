@@ -54,7 +54,7 @@ interface UseLibraryPageOptions {
   removeInstance: (id: string) => Promise<void>;
   toSidebar: () => void;
   push: (frame: NavFrame) => void;
-  openOSK: (initial: string, onConfirm: (value: string) => void, onCancel?: () => void) => void;
+  openOSK: (label: string, initial: string, onConfirm: (value: string) => void, onCancel?: () => void) => void;
 }
 
 export function useLibraryPage({
@@ -196,7 +196,7 @@ export function useLibraryPage({
           } else if (action.id === "launch" && selectedInstance) {
             void launchInstance(selectedInstance);
           } else if (action.id === "rename" && selectedInstance) {
-            openOSK(selectedInstance.name, (name) => {
+            openOSK("Instance Name", selectedInstance.name, (name) => {
               const trimmed = name.trim();
               if (trimmed) void updateInstance({ ...selectedInstance, name: trimmed });
             });

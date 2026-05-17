@@ -211,7 +211,13 @@ function App() {
 
   // ── input routing ─────────────────────────────────────────────────────────
   const handleInput = useCallback(
-    (input: Parameters<typeof home.handleInput>[0]) => {
+    (raw: Parameters<typeof home.handleInput>[0]) => {
+      // On Linux, Xbox controllers fire BTN_WEST for the physical Y button and
+      // BTN_NORTH for physical X (kernel UAPI swap). Correct it here so every
+      // downstream handler and glyph lookup can treat "Y" as physical Y.
+      const input = (controllerType === "xbox" && (raw === "X" || raw === "Y"))
+        ? (raw === "X" ? "Y" : "X")
+        : raw;
       if (showWelcome) {
         if (auth.signingIn) {
           if (input === "B" || input === "A") auth.cancelSignIn();
@@ -246,7 +252,7 @@ function App() {
       else if (current.id === "account") accountPage.handleInput(input);
       else if (current.id === "updates") updatesPage.handleInput(input);
     },
-    [showWelcome, auth.signingIn, auth.cancelSignIn, auth.startSignIn, isGameRunning, forceUnlock, clearUnlockHold, launchError, dismissError, osk.handleInput, vibrationEnabled, playUiMoveRumble, globalFocus, current.id, sidebar, home, settings, createPage, library, instancePage, accountPage, updatesPage],
+    [controllerType, showWelcome, auth.signingIn, auth.cancelSignIn, auth.startSignIn, isGameRunning, forceUnlock, clearUnlockHold, launchError, dismissError, osk.handleInput, vibrationEnabled, playUiMoveRumble, globalFocus, current.id, sidebar, home, settings, createPage, library, instancePage, accountPage, updatesPage],
   );
 
   const handleRelease = useCallback((input: Parameters<typeof handleInput>[0]) => {
@@ -327,7 +333,7 @@ function App() {
           controllerType={controllerType}
         />
       )}
-      {osk.isOpen && <OSK value={osk.value} cursorPos={osk.cursorPos} focus={osk.focus} isShift={osk.isShift} flashKey={osk.flashKey} controllerType={controllerType} />}
+      {osk.isOpen && <OSK label={osk.label} value={osk.value} cursorPos={osk.cursorPos} focus={osk.focus} isShift={osk.isShift} flashKey={osk.flashKey} controllerType={controllerType} />}
       {isGameRunning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
           <div className="simple-panel flex min-w-[40rem] flex-col items-center gap-6 rounded-[2rem] px-14 py-12 text-center">
@@ -346,7 +352,7 @@ function App() {
                 ) : (
                   <>
                     <span>Hold</span>
-                    {(() => { const g = inputToGlyph("START", controllerType); return g ? <GamepadGlyph controller={controllerType} button={g} size={28} /> : null; })()}
+                    {(() => { const g = inputToGlyph("START"); return g ? <GamepadGlyph controller={controllerType} button={g} size={28} /> : null; })()}
                     <span>for 5 seconds to force unlock</span>
                   </>
                 )}
@@ -538,6 +544,8 @@ function App() {
                   selectedModpack={createPage.selectedModpack}
                   modpackVersions={createPage.modpackVersions}
                   modpackVersionsLoading={createPage.modpackVersionsLoading}
+                  importFiles={createPage.importFiles}
+                  importLoading={createPage.importLoading}
                   isInstalling={createPage.isInstalling}
                   installProgress={createPage.installProgress}
                   installError={createPage.installError}
@@ -680,8 +688,8 @@ function WelcomeOverlay({
 
   const mins = Math.floor(secondsLeft / 60);
   const secs = String(secondsLeft % 60).padStart(2, "0");
-  const aGlyph = inputToGlyph("A", controllerType);
-  const bGlyph = inputToGlyph("B", controllerType);
+  const aGlyph = inputToGlyph("A");
+  const bGlyph = inputToGlyph("B");
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#0b0d0c]">

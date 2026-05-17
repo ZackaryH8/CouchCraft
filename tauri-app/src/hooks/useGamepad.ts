@@ -107,8 +107,9 @@ export function useGamepad(
         }, INITIAL_DELAY);
       };
 
-      void import('tauri-plugin-gamepad-api').then(async ({ execute }) => {
+      void import('tauri-plugin-gamepad-api').then(async ({ execute, setLogging }) => {
         if (!isActive) return;
+        await setLogging(false);
 
         // Per-button timestamp of last fired input. ButtonPressed and
         // ButtonChanged both fire for the same physical press; whichever
@@ -186,7 +187,7 @@ export function useGamepad(
 
             if (axisName === 'LeftStickX' || axisName === 'LeftX') axisState.x = value;
             else if (axisName === 'LeftStickY' || axisName === 'LeftY') axisState.y = -value;
-            else if (axisName === 'RightStickY' || axisName === 'RightY') { rightY.v = value; return; }
+            else if (axisName === 'RightStickY' || axisName === 'RightY') { rightY.v = -value; return; }
             else return;
 
             const direction = axisToDirection(axisState.x, axisState.y);

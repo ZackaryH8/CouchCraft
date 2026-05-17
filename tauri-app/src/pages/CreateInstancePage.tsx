@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
   CreateStep, GameInstance, LoaderType, McVersionInfo, LoaderVersionInfo,
-  ModrinthHit, ModpackVersionInfo, MrpackInstallResult, PrepareProgress,
+  ModrinthHit, ModpackVersionInfo, MrpackInstallResult, PrepareProgress, ImportFile,
 } from "../types";
 import { LOADERS, INSTANCE_COLORS, LOADER_COLORS } from "../constants";
 import { GamepadGlyph } from "../components/GamepadGlyph";
@@ -26,6 +26,7 @@ const STEP_LABELS: Record<CreateStep, string> = {
   confirm:          "Confirm",
   modpack_search:   "Browse Modpacks",
   modpack_version:  "Choose Version",
+  imports:          "Import Pack",
 };
 
 const STEP_HINTS: Record<CreateStep, string> = {
@@ -37,12 +38,13 @@ const STEP_HINTS: Record<CreateStep, string> = {
   confirm:          "A to create the instance. B to go back.",
   modpack_search:   "D-pad to browse. A to select. X to search by name. B to go back.",
   modpack_version:  "Press A to install the latest version, or D-pad down to choose an older one. B to go back.",
+  imports:          "D-pad to browse. A to install. B to go back.",
 };
 
 function getCreateCols(step: CreateStep): number {
   if (step === "version" || step === "color" || step === "loader_version") return 4;
   if (step === "loader" || step === "modpack_search") return 2;
-  return 1; // source, confirm, modpack_version — single column, UP/DOWN navigation
+  return 1;
 }
 
 function nextCustomStep(step: CreateStep, loader: string): CreateStep {
@@ -65,7 +67,7 @@ function prevCustomStep(step: CreateStep, loader: string): CreateStep | null {
 interface UseCreatePageOptions {
   pop: () => void;
   onCreated: (instance: GameInstance) => Promise<void>;
-  openOSK: (initial: string, onConfirm: (value: string) => void, onCancel?: () => void) => void;
+  openOSK: (label: string, initial: string, onConfirm: (value: string) => void, onCancel?: () => void) => void;
   mcVersions: McVersionInfo[];
   fetchLoaderVersions: (loader: LoaderType, mcVersion: string) => Promise<LoaderVersionInfo[]>;
 }
@@ -90,6 +92,10 @@ export function useCreatePage({
   const [loaderVersions, setLoaderVersions] = useState<LoaderVersionInfo[]>([]);
   const [isLoadingLoaderVersions, setIsLoadingLoaderVersions] = useState(false);
   const [showOnlyStable, setShowOnlyStable] = useState(true);
+
+  // Imports flow state
+  const [importFiles, setImportFiles] = useState<ImportFile[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
 
   // Modpack flow state
   const [modpackQuery, setModpackQuery] = useState("");
@@ -133,6 +139,7 @@ export function useCreatePage({
 
   const effectiveSteps = useMemo<CreateStep[]>(() => {
     if (createStep === "source") return ["source"];
+    if (createStep === "imports") return ["source", "imports"];
     if (["modpack_search", "modpack_version"].includes(createStep))
       return ["source", "modpack_search", "modpack_version"];
     const custom =
@@ -153,6 +160,8 @@ export function useCreatePage({
     setShowSnapshots(false);
     setLoaderVersions([]);
     setShowOnlyStable(true);
+    setImportFiles([]);
+    setImportLoading(false);
     setModpackQuery("");
     setModpackResults([]);
     setModpackLoading(false);
@@ -183,16 +192,77 @@ export function useCreatePage({
 
   const selectItem = useCallback(
     (i: number) => {
+      // Shared post-install handler for both modpack and local import paths.
+      const finishMrpackInstall = async (
+        result: MrpackInstallResult,
+        instanceId: string,
+        now: number,
+      ) => {
+        const loaderType = (result.loaderType as LoaderType) in LOADER_COLORS
+          ? (result.loaderType as LoaderType)
+          : "fabric";
+        await Promise.all(result.installedMods.map((mod) => {
+          const name = mod.filename.replace(/\.jar$/i, "").replace(/[-_]/g, " ");
+          const item: ContentItem = {
+            id: crypto.randomUUID(),
+            instanceId,
+            category: "mod",
+            name,
+            filename: mod.filename,
+            version: "",
+            source: "modrinth",
+            modrinthProjectId: mod.modrinthProjectId,
+            modrinthVersionId: mod.modrinthVersionId,
+            enabled: true,
+            installedAt: now,
+            updateCheckedAt: null,
+            updateAvailable: false,
+            fromModpack: true,
+          };
+          return insertContent(item);
+        }));
+        const newInstance: GameInstance = {
+          id: instanceId,
+          name: result.name,
+          loaderType,
+          loaderVersion: result.loaderVersion,
+          minecraftVersion: result.mcVersion,
+          color: LOADER_COLORS[loaderType],
+          iconData: result.iconData,
+          javaVersion: requiredJavaVersion(result.mcVersion),
+          ramMb: 4096,
+          jvmArgs: "",
+          notes: "",
+          lastPlayedAt: null,
+          playTimeSecs: 0,
+          modCount: result.installedMods.length,
+          sortOrder: 0,
+          createdAt: now,
+        };
+        return onCreated(newInstance);
+      };
+
       if (createStep === "source") {
         if (i === 0) {
-          // Custom instance
           setCreateStep("loader");
           setCreateItemIndex(0);
-        } else {
+        } else if (i === 1) {
           // Modpack
           setCreateStep("modpack_search");
           setCreateItemIndex(0);
           loadModpacks("");
+        } else {
+          // Import
+          setCreateStep("imports");
+          setCreateItemIndex(0);
+          setImportLoading(true);
+          void invoke<ImportFile[]>("list_import_files").then((files) => {
+            setImportFiles(files);
+            setImportLoading(false);
+          }).catch(() => {
+            setImportFiles([]);
+            setImportLoading(false);
+          });
         }
       } else if (createStep === "loader") {
         const loader = LOADERS[i];
@@ -217,6 +287,7 @@ export function useCreatePage({
         const loaderOpt = LOADERS.find((l) => l.id === draftLoader);
         const autoName = `${loaderOpt?.label ?? "Custom"} ${draftVersion}`;
         openOSK(
+          "Instance Name",
           autoName,
           (name) => {
             setDraftName(name.trim() || autoName);
@@ -271,19 +342,47 @@ export function useCreatePage({
             setModpackVersions([]);
             setModpackVersionsLoading(false);
           });
-      } else if (createStep === "modpack_version") {
-        const version = modpackVersions[i];
-        if (!version || !selectedModpack) return;
-
+      } else if (createStep === "imports") {
+        const importFile = importFiles[i];
+        if (!importFile) return;
         const instanceId = crypto.randomUUID();
         setIsInstalling(true);
         setInstallProgress(null);
         setInstallError(null);
-
         const unlisten = listen<PrepareProgress>("prepare-progress", (event) => {
           setInstallProgress(event.payload);
         });
-
+        void invoke<string>("create_instance_dirs", { instanceId })
+          .then(() =>
+            invoke<MrpackInstallResult>("install_mrpack_from_file", {
+              instanceId,
+              filePath: importFile.path,
+            })
+          )
+          .then(async (result) => {
+            await finishMrpackInstall(result, instanceId, Math.floor(Date.now() / 1000));
+          })
+          .then(() => {
+            void unlisten.then((u) => u());
+            setIsInstalling(false);
+            pop();
+            resetDraft();
+          })
+          .catch((err: unknown) => {
+            void unlisten.then((u) => u());
+            setIsInstalling(false);
+            setInstallError(String(err));
+          });
+      } else if (createStep === "modpack_version") {
+        const version = modpackVersions[i];
+        if (!version || !selectedModpack) return;
+        const instanceId = crypto.randomUUID();
+        setIsInstalling(true);
+        setInstallProgress(null);
+        setInstallError(null);
+        const unlisten = listen<PrepareProgress>("prepare-progress", (event) => {
+          setInstallProgress(event.payload);
+        });
         void invoke<string>("create_instance_dirs", { instanceId })
           .then(() =>
             invoke<MrpackInstallResult>("install_mrpack", {
@@ -293,52 +392,7 @@ export function useCreatePage({
             })
           )
           .then(async (result) => {
-            const now = Math.floor(Date.now() / 1000);
-            const loaderType = (result.loaderType as LoaderType) in LOADER_COLORS
-              ? (result.loaderType as LoaderType)
-              : "fabric";
-
-            // Insert content records so mod count and mod list are populated
-            await Promise.all(result.installedMods.map((mod) => {
-              const name = mod.filename.replace(/\.jar$/i, "").replace(/[-_]/g, " ");
-              const item: ContentItem = {
-                id: crypto.randomUUID(),
-                instanceId,
-                category: "mod",
-                name,
-                filename: mod.filename,
-                version: "",
-                source: "modrinth",
-                modrinthProjectId: mod.modrinthProjectId,
-                modrinthVersionId: mod.modrinthVersionId,
-                enabled: true,
-                installedAt: now,
-                updateCheckedAt: null,
-                updateAvailable: false,
-                fromModpack: true,
-              };
-              return insertContent(item);
-            }));
-
-            const newInstance: GameInstance = {
-              id: instanceId,
-              name: result.name,
-              loaderType,
-              loaderVersion: result.loaderVersion,
-              minecraftVersion: result.mcVersion,
-              color: LOADER_COLORS[loaderType],
-              iconData: result.iconData,
-              javaVersion: requiredJavaVersion(result.mcVersion),
-              ramMb: 4096,
-              jvmArgs: "",
-              notes: "",
-              lastPlayedAt: null,
-              playTimeSecs: 0,
-              modCount: result.installedMods.length,
-              sortOrder: 0,
-              createdAt: now,
-            };
-            return onCreated(newInstance);
+            await finishMrpackInstall(result, instanceId, Math.floor(Date.now() / 1000));
           })
           .then(() => {
             void unlisten.then((u) => u());
@@ -355,7 +409,7 @@ export function useCreatePage({
     },
     [
       createStep, draftLoader, draftVersion, draftLoaderVersion, draftColor, draftName,
-      filteredMcVersions, filteredLoaderVersions, modpackResults, modpackVersions,
+      filteredMcVersions, filteredLoaderVersions, modpackResults, modpackVersions, importFiles,
       selectedModpack, onCreated, pop, resetDraft, openOSK, startLoaderVersionFetch, loadModpacks,
     ],
   );
@@ -381,7 +435,7 @@ export function useCreatePage({
           return;
         }
         if (createStep === "modpack_search") {
-          openOSK(modpackQuery, (query) => {
+          openOSK("Search", modpackQuery, (query) => {
             setModpackQuery(query);
             loadModpacks(query);
           });
@@ -391,13 +445,14 @@ export function useCreatePage({
 
       const cols = getCreateCols(createStep);
       const count =
-        createStep === "source" ? 2
+        createStep === "source" ? 3
         : createStep === "loader" ? LOADERS.length
         : createStep === "version" ? Math.max(filteredMcVersions.length, 1)
         : createStep === "loader_version" ? Math.max(filteredLoaderVersions.length, 1)
         : createStep === "color" ? INSTANCE_COLORS.length
         : createStep === "modpack_search" ? Math.max(modpackResults.length, 1)
         : createStep === "modpack_version" ? Math.max(modpackVersions.length, 1)
+        : createStep === "imports" ? Math.max(importFiles.length, 1)
         : 1;
 
       switch (input) {
@@ -420,6 +475,9 @@ export function useCreatePage({
           if (createStep === "source") {
             pop();
             resetDraft();
+          } else if (createStep === "imports") {
+            setCreateStep("source");
+            setCreateItemIndex(2);
           } else if (createStep === "modpack_search") {
             setCreateStep("source");
             setCreateItemIndex(1);
@@ -443,7 +501,7 @@ export function useCreatePage({
     [
       createStep, createItemIndex, draftLoader, isInstalling, installError, modpackQuery,
       filteredMcVersions.length, filteredLoaderVersions.length,
-      modpackResults.length, modpackVersions.length,
+      modpackResults.length, modpackVersions.length, importFiles.length,
       selectItem, pop, resetDraft, openOSK, loadModpacks,
     ],
   );
@@ -468,6 +526,8 @@ export function useCreatePage({
     selectedModpack,
     modpackVersions,
     modpackVersionsLoading,
+    importFiles,
+    importLoading,
     isInstalling,
     installProgress,
     installError,
@@ -501,6 +561,8 @@ interface CreateInstancePageProps {
   selectedModpack: ModrinthHit | null;
   modpackVersions: ModpackVersionInfo[];
   modpackVersionsLoading: boolean;
+  importFiles: ImportFile[];
+  importLoading: boolean;
   isInstalling: boolean;
   installProgress: PrepareProgress | null;
   installError: string | null;
@@ -532,6 +594,8 @@ export function CreateInstancePage({
   selectedModpack,
   modpackVersions,
   modpackVersionsLoading,
+  importFiles,
+  importLoading,
   isInstalling,
   installProgress,
   installError,
@@ -633,6 +697,11 @@ export function CreateInstancePage({
                 label: "Modpack",
                 sub: "Browse and install a Modrinth modpack. Mods come pre-bundled.",
                 accent: "#818cf8",
+              },
+              {
+                label: "Import",
+                sub: "Install a .mrpack file you've placed in the imports folder.",
+                accent: "#f59e0b",
               },
             ].map((opt, i) => (
               <article
@@ -835,7 +904,7 @@ export function CreateInstancePage({
                 {modpackQuery || <span className="text-stone-600">Search modpacks…</span>}
               </div>
               {(() => {
-                const g = inputToGlyph("X", controllerType);
+                const g = inputToGlyph("X");
                 return (
                   <span className="flex items-center gap-1.5 text-xs text-stone-500">
                     {g && <GamepadGlyph controller={controllerType} button={g} size={14} />}
@@ -853,7 +922,7 @@ export function CreateInstancePage({
               <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
                 <p className="text-lg text-stone-400">No packs found.</p>
                 {(() => {
-                  const g = inputToGlyph("X", controllerType);
+                  const g = inputToGlyph("X");
                   return (
                     <p className="flex items-center gap-1.5 text-sm text-stone-600">
                       Press {g && <GamepadGlyph controller={controllerType} button={g} size={14} />} to search by name.
@@ -958,13 +1027,48 @@ export function CreateInstancePage({
             )}
           </div>
         )}
+
+        {/* ── Imports ── */}
+        {step === "imports" && (
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            {importLoading ? (
+              <div className="flex flex-1 items-center justify-center gap-4 text-stone-400">
+                <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-lime-300/60 border-t-transparent" />
+                <span className="text-lg">Scanning imports folder…</span>
+              </div>
+            ) : importFiles.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+                <p className="text-lg text-stone-400">No .mrpack files found.</p>
+                <p className="text-sm text-stone-600">
+                  Drop .mrpack files into the <span className="font-mono text-stone-500">imports/</span> folder inside the app data directory, then come back.
+                </p>
+              </div>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+                {importFiles.map((file, i) => (
+                  <button
+                    key={file.path}
+                    ref={(node) => { itemRefs.current[i] = node; }}
+                    type="button"
+                    onClick={() => onSelect(i)}
+                    onMouseEnter={() => onMoveFocus(i)}
+                    className={`flex shrink-0 items-center justify-between rounded-[1.25rem] border px-5 py-4 text-left transition duration-200 ${isFocused(i) ? "border-lime-300/60 bg-[#171c1a]" : "border-white/8 bg-[#121514]"}`}
+                  >
+                    <p className="font-semibold text-white">{file.name.replace(/\.mrpack$/i, "")}</p>
+                    <p className="font-mono text-xs text-stone-600">.mrpack</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Inspector sidebar ── */}
       <aside className="simple-panel flex flex-col rounded-[1.75rem] px-6 py-6">
         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-stone-500">Preview</p>
 
-        {step === "modpack_search" || step === "modpack_version" ? (
+        {step === "modpack_search" || step === "modpack_version" || step === "imports" ? (
           <div className="mt-4">
             {selectedModpack ? (
               <>

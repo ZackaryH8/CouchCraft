@@ -100,7 +100,13 @@ export interface McAccount {
 export type CreateStep =
   | "source"
   | "loader" | "version" | "loader_version" | "color" | "confirm"
-  | "modpack_search" | "modpack_version";
+  | "modpack_search" | "modpack_version"
+  | "imports";
+
+export interface ImportFile {
+  name: string;
+  path: string;
+}
 
 export interface ModpackVersionInfo {
   versionId: string;

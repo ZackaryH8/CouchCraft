@@ -61,6 +61,7 @@ export function useOSK() {
   // the App.tsx input-routing callback always reads the current value even
   // when the React closure still captures the previous render's value.
   const isOpenRef = useRef(false);
+  const [label, setLabel] = useState("");
   const [value, setValue] = useState("");
   const [cursorPos, setCursorPos] = useState(0);
   const [focus, setFocus] = useState<OskFocus>(INITIAL_FOCUS);
@@ -76,8 +77,9 @@ export function useOSK() {
   }, []);
 
   const open = useCallback(
-    (initial: string, onConfirm: (value: string) => void, onCancel?: () => void) => {
+    (label: string, initial: string, onConfirm: (value: string) => void, onCancel?: () => void) => {
       isOpenRef.current = true;
+      setLabel(label);
       setValue(initial);
       setCursorPos(initial.length);
       setFocus(INITIAL_FOCUS);
@@ -130,13 +132,13 @@ export function useOSK() {
       // This is a Linux kernel convention: BTN_X is aliased to BTN_NORTH (0x133) and
       // BTN_Y to BTN_WEST (0x134) in input-event-codes.h — gilrs follows it faithfully.
       // The actions below are written in terms of GamepadInput, not physical labels.
-      if (input === "X") {
+      if (input === "Y") {
         flash("space");
         setValue((v) => v.slice(0, cursorPos) + " " + v.slice(cursorPos));
         setCursorPos((p) => p + 1);
         return;
       }
-      if (input === "Y") {
+      if (input === "X") {
         flash("backspace");
         if (cursorPos > 0) {
           setValue((v) => v.slice(0, cursorPos - 1) + v.slice(cursorPos));
@@ -265,5 +267,5 @@ export function useOSK() {
     [focus, isShift, value, cursorPos, close, flash],
   );
 
-  return { isOpen, isOpenRef, value, cursorPos, focus, isShift, flashKey, open, handleInput };
+  return { isOpen, isOpenRef, label, value, cursorPos, focus, isShift, flashKey, open, handleInput };
 }

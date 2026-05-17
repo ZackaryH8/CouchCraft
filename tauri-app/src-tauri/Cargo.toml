@@ -1,6 +1,6 @@
 [package]
 name = "couchcraft"
-version = "0.1.8"
+version = "0.1.9"
 description = "A 10-foot Minecraft launcher built for the couch"
 authors = ["Zack Eckersley Pallett"]
 edition = "2021"
@@ -23,7 +23,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-gamepad = "0.0.5"
+tauri-plugin-gamepad = { git = "https://github.com/ZackaryH8/tauri-plugin-gamepad.git", branch = "master" }
 gilrs = "0.11.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 fastnbt = "2"

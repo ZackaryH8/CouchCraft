@@ -54,7 +54,7 @@ interface UseInstancePageOptions {
   removeInstance: (id: string) => Promise<void>;
   pop: () => void;
   toSidebar: () => void;
-  openOSK: (initial: string, onConfirm: (value: string) => void, onCancel?: () => void) => void;
+  openOSK: (label: string, initial: string, onConfirm: (value: string) => void, onCancel?: () => void) => void;
 }
 
 export function useInstancePage({
@@ -229,7 +229,7 @@ export function useInstancePage({
             if (id === "launch") {
               void launchInstance(instance);
             } else if (id === "rename") {
-              openOSK(instance.name, (name) => {
+              openOSK("Instance Name", instance.name, (name) => {
                 const trimmed = name.trim();
                 if (trimmed) void updateInstance({ ...instance, name: trimmed });
               });
@@ -242,11 +242,11 @@ export function useInstancePage({
               setRamIndex(ri >= 0 ? ri : RAM_OPTIONS.indexOf(4096));
               setOverlay("ram");
             } else if (id === "jvm") {
-              openOSK(instance.jvmArgs, (args) => {
+              openOSK("JVM Arguments", instance.jvmArgs, (args) => {
                 void updateInstance({ ...instance, jvmArgs: args });
               });
             } else if (id === "notes") {
-              openOSK(instance.notes, (notes) => {
+              openOSK("Notes", instance.notes, (notes) => {
                 void updateInstance({ ...instance, notes });
               });
             } else if (id === "delete") {
@@ -296,7 +296,7 @@ interface ContentTabViewProps {
 
 function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
   const Btn = ({ input, label }: { input: string; label: string }) => {
-    const glyph = inputToGlyph(input, ct);
+    const glyph = inputToGlyph(input);
     return (
       <span className="inline-flex items-center gap-1">
         {glyph && <GamepadGlyph controller={ct} button={glyph} size={14} />}
@@ -617,7 +617,7 @@ function FilesTabView({ tab, hasFocus, ct }: FilesTabViewProps) {
   const breadcrumb = currentPath ? `.minecraft/${currentPath.replace(/\//g, " / ")}` : ".minecraft";
 
   const Btn = ({ input, label }: { input: string; label: string }) => {
-    const glyph = inputToGlyph(input, ct);
+    const glyph = inputToGlyph(input);
     return (
       <span className="inline-flex items-center gap-1">
         {glyph && <GamepadGlyph controller={ct} button={glyph} size={14} />}
@@ -737,7 +737,7 @@ function WorldsTabView({ tab, hasFocus, ct }: { tab: WorldsTabState; hasFocus: b
       <p className="text-sm text-stone-600">Launch the instance once to create a world.</p>
     </div>
   );
-  const aGlyph = inputToGlyph("A", ct);
+  const aGlyph = inputToGlyph("A");
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
       <p className="mb-1 inline-flex items-center gap-1 text-xs text-stone-600">
@@ -785,7 +785,7 @@ function ServersTabView({ tab, hasFocus, ct }: { tab: ServersTabState; hasFocus:
       <p className="text-sm text-stone-600">Add servers in-game and they'll appear here.</p>
     </div>
   );
-  const aGlyph = inputToGlyph("A", ct);
+  const aGlyph = inputToGlyph("A");
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
       <p className="mb-1 inline-flex items-center gap-1 text-xs text-stone-600">

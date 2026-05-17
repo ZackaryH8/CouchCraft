@@ -70,6 +70,7 @@ interface UseContentTabOptions {
   loaderType: LoaderType;
   isActive: boolean;
   openOSK: (
+    label: string,
     initial: string,
     onConfirm: (value: string) => void,
     onCancel?: () => void,
@@ -143,7 +144,7 @@ export function useContentTab({
   }, [doSearch, searchResults.length]);
 
   const openSearch = useCallback(() => {
-    openOSK(searchQueryRef.current, (query) => {
+    openOSK("Search", searchQueryRef.current, (query) => {
       searchQueryRef.current = query;
       void doSearch(query);
     });

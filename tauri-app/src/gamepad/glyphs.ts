@@ -40,7 +40,7 @@ export function getGlyph(
   return `/gamepad/${controller}/${fileName}.png`;
 }
 
-export function inputToGlyph(input: string, ct: ControllerType): LogicalButton | null {
+export function inputToGlyph(input: string): LogicalButton | null {
   switch (input) {
     case "A":   return "south";
     case "B":   return "east";

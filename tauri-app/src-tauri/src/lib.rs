@@ -15,7 +15,7 @@ use worlds::list_worlds;
 use servers::list_servers;
 use logs::{read_instance_log, get_latest_crash_report};
 use install::{prepare_instance, launch_game, detect_java_runtimes};
-use modpack::{list_modpack_versions, install_mrpack};
+use modpack::{list_modpack_versions, install_mrpack, install_mrpack_from_file, list_import_files};
 use tauri_plugin_sql::{Migration, MigrationKind};
 use gilrs::{
     ff::{BaseEffect, BaseEffectType, Effect, EffectBuilder, Replay, Repeat, Ticks},
@@ -300,6 +300,8 @@ pub fn run() {
             refresh_mc_auth,
             list_modpack_versions,
             install_mrpack,
+            install_mrpack_from_file,
+            list_import_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

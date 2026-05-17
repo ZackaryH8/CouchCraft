@@ -83,6 +83,14 @@ All page hooks are **always mounted** in `App.tsx` (not conditionally). This kee
 
 All database reads/writes go through `src/services/db.ts`. The SQLite schema is defined in `lib.rs` as a migration (version 1). Tables: `instances`, `settings`.
 
+### OSK (on-screen keyboard)
+
+`useOSK` in `hooks/useOSK.ts` manages keyboard state. Open it with `osk.open(label, initialValue, onConfirm, onCancel?)`. The `label` string is displayed as the field title — pass something descriptive like `"Instance Name"`, `"Search"`, or `"JVM Arguments"`.
+
+### Mrpack imports
+
+Users can drop `.mrpack` files into `<app_data>/imports/` (i.e. `~/.local/share/com.couchcraft.launcher/imports/` on Linux). The Create flow's "Import" source option scans this directory via `list_import_files` and installs the selected pack using `install_mrpack_from_file`. The folder is global — files persist and are not consumed after install.
+
 ### Display scaling
 
 `useViewportScale` returns `min(innerWidth/1920, innerHeight/1080)`. `App.tsx` applies this as `transform: scale(N)` with `transformOrigin: "top left"` on a fixed 1920×1080 root element. Do not use viewport units (`vw`, `vh`) or dynamic font sizes — everything is designed at 1920×1080 and scaled via transform.
