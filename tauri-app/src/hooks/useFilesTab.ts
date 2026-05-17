@@ -3,6 +3,13 @@ import { invoke } from "@tauri-apps/api/core";
 import type { FileEntry } from "../types";
 import type { GamepadInput } from "./useGamepad";
 
+export const FILES_TAB_BTNS = {
+  enter:  "A",
+  up:     "B",
+  rename: "X",
+  delete: "Y",
+} as const satisfies Record<string, GamepadInput>;
+
 export interface FilesTabState {
   entries: FileEntry[];
   currentPath: string;
@@ -152,11 +159,11 @@ export function useFilesTab({
           }
           return false; // At root — let instance page pop
 
-        case "X":
+        case FILES_TAB_BTNS.rename:
           if (entry) renameEntry(entry);
           return true;
 
-        case "Y":
+        case FILES_TAB_BTNS.delete:
           if (entry) setDeleteOverlay(entry);
           return true;
       }

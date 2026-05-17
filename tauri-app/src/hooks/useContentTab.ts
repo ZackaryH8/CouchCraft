@@ -15,6 +15,16 @@ import type {
 } from "../types";
 import type { GamepadInput } from "./useGamepad";
 
+// ─── button assignments ───────────────────────────────────────────────────────
+// Change a value here and both the handler and JSX labels update together.
+
+export const CONTENT_TAB_BTNS = {
+  toggle: "A",
+  delete: "X",
+  browse: "Y",
+  search: "Y",
+} as const satisfies Record<string, import("./useGamepad").GamepadInput>;
+
 // ─── category helpers ─────────────────────────────────────────────────────────
 
 const CATEGORY_TO_PROJECT_TYPE: Record<ContentCategory, string> = {
@@ -270,7 +280,7 @@ export function useContentTab({
             if (hit && !installedProjectIds.has(hit.projectId)) void selectResult(hit);
             return true;
           }
-          case "X":
+          case CONTENT_TAB_BTNS.search:
             openSearch();
             return true;
           case "B":
@@ -293,12 +303,12 @@ export function useContentTab({
           if (item) void toggleItem(item);
           return true;
         }
-        case "Y": {
+        case CONTENT_TAB_BTNS.delete: {
           const item = items[installedIndex];
           if (item) { setDeleteChoice(0); setDeleteOverlay(item); }
           return true;
         }
-        case "X":
+        case CONTENT_TAB_BTNS.browse:
           openBrowse();
           return true;
       }

@@ -3,8 +3,8 @@ import type { GameInstance } from "../types";
 import { INSTANCE_COLORS, LOADER_COLORS, LOADER_LABELS } from "../constants";
 import { formatLastPlayed, formatModCount, formatPlaytime, formatRam, formatBytes } from "../utils/format";
 import type { GamepadInput } from "../hooks/useGamepad";
-import { useContentTab, type ContentTabState } from "../hooks/useContentTab";
-import { useFilesTab, type FilesTabState } from "../hooks/useFilesTab";
+import { useContentTab, type ContentTabState, CONTENT_TAB_BTNS } from "../hooks/useContentTab";
+import { useFilesTab, type FilesTabState, FILES_TAB_BTNS } from "../hooks/useFilesTab";
 import { useWorldsTab, type WorldsTabState } from "../hooks/useWorldsTab";
 import { useServersTab, type ServersTabState } from "../hooks/useServersTab";
 import { useLogsTab, type LogsTabState, type LogFilter } from "../hooks/useLogsTab";
@@ -427,7 +427,7 @@ function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
               onClick={onOpenBrowse}
               className="rounded-[0.8rem] border border-white/8 bg-[#121514] px-4 py-2 text-sm font-semibold text-stone-300 transition duration-200 hover:border-lime-300/40 hover:text-white"
             >
-              Browse Modrinth <Btn input="X" label="" />
+              Browse Modrinth <Btn input={CONTENT_TAB_BTNS.browse} label="" />
             </button>
           </div>
 
@@ -445,7 +445,7 @@ function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
                     Browse Modrinth to find and install compatible {tabName.toLowerCase()}.
                   </p>
                 </div>
-                <p className="text-sm text-stone-600">Press <Btn input="X" label="" /> to browse Modrinth.</p>
+                <p className="text-sm text-stone-600">Press <Btn input={CONTENT_TAB_BTNS.browse} label="" /> to browse Modrinth.</p>
               </div>
             </div>
           ) : (
@@ -490,8 +490,8 @@ function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
                     {/* Hint when selected */}
                     {isSelected && (
                       <div className="flex shrink-0 items-center gap-2 text-xs text-stone-600">
-                        <Btn input="A" label="toggle" />
-                        <Btn input="Y" label="delete" />
+                        <Btn input={CONTENT_TAB_BTNS.toggle} label="toggle" />
+                        <Btn input={CONTENT_TAB_BTNS.delete} label="delete" />
                       </div>
                     )}
                   </div>
@@ -513,7 +513,7 @@ function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
               onClick={onOpenSearch}
               className="rounded-[0.8rem] border border-white/8 bg-[#121514] px-4 py-2 text-sm font-semibold text-stone-300 transition duration-200 hover:border-lime-300/40 hover:text-white"
             >
-              Search <Btn input="X" label="" />
+              Search <Btn input={CONTENT_TAB_BTNS.search} label="" />
             </button>
           </div>
 
@@ -524,7 +524,7 @@ function ContentTabView({ tab, tabName, hasFocus, ct }: ContentTabViewProps) {
           ) : searchResults.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
               <p className="text-lg font-semibold text-stone-500">No results</p>
-              <p className="text-sm text-stone-600">Press <Btn input="X" label="" /> to search for {tabName.toLowerCase()}.</p>
+              <p className="text-sm text-stone-600">Press <Btn input={CONTENT_TAB_BTNS.search} label="" /> to search for {tabName.toLowerCase()}.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-2 overflow-y-auto">
@@ -656,10 +656,10 @@ function FilesTabView({ tab, hasFocus, ct }: FilesTabViewProps) {
       <div className="flex items-center justify-between">
         <p className="font-mono text-sm font-semibold text-stone-400">{breadcrumb}/</p>
         <div className="flex items-center gap-3 text-xs text-stone-600">
-          <Btn input="A" label="open" />
-          <Btn input="X" label="rename" />
-          <Btn input="Y" label="delete" />
-          <Btn input="B" label="up" />
+          <Btn input={FILES_TAB_BTNS.enter} label="open" />
+          <Btn input={FILES_TAB_BTNS.rename} label="rename" />
+          <Btn input={FILES_TAB_BTNS.delete} label="delete" />
+          <Btn input={FILES_TAB_BTNS.up} label="up" />
         </div>
       </div>
 
@@ -709,9 +709,9 @@ function FilesTabView({ tab, hasFocus, ct }: FilesTabViewProps) {
                 {isSelected && (
                   <div className="flex shrink-0 items-center gap-2 text-xs text-stone-600">
                     {entry.isDir ? (
-                      <><Btn input="A" label="enter" /><Btn input="Y" label="delete" /></>
+                      <><Btn input={FILES_TAB_BTNS.enter} label="enter" /><Btn input={FILES_TAB_BTNS.delete} label="delete" /></>
                     ) : (
-                      <><Btn input="X" label="rename" /><Btn input="Y" label="delete" /></>
+                      <><Btn input={FILES_TAB_BTNS.rename} label="rename" /><Btn input={FILES_TAB_BTNS.delete} label="delete" /></>
                     )}
                   </div>
                 )}
@@ -876,7 +876,7 @@ function LogsTabView({ tab }: { tab: LogsTabState }) {
           <p className="text-stone-500">No log file yet. Launch the instance to generate one.</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto rounded-[1.25rem] border border-white/8 bg-black/40 px-5 py-4">
+        <div ref={tab.scrollRef} className="flex-1 overflow-y-auto rounded-[1.25rem] border border-white/8 bg-black/40 px-5 py-4">
           {lines.map((line, i) => (
             <p key={i} className={`font-mono text-xs leading-5 ${lineColor(line)}`}>{line}</p>
           ))}

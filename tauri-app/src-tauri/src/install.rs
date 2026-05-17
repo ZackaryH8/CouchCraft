@@ -395,8 +395,8 @@ pub async fn launch_game(app: tauri::AppHandle, config: LaunchConfig) -> Result<
         game_args.push(server.clone());
     }
 
-    // Set to full screen by default, since that's what most players expect
-    game_args.push("--fullscreen".into());
+    // Force fullscreen via options.txt — Minecraft ignores --fullscreen as a CLI arg.
+    write_options_fullscreen(&game_dir);
 
     let java_bin = if !config.java_path.is_empty() {
         config.java_path.clone()
@@ -414,9 +414,10 @@ pub async fn launch_game(app: tauri::AppHandle, config: LaunchConfig) -> Result<
     // Redirect Java stdout+stderr to .minecraft/logs/latest.log
     let logs_dir = game_dir.join("logs");
     std::fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
+    let log_path = logs_dir.join("latest.log");
     let log_file = std::fs::OpenOptions::new()
         .create(true).write(true).truncate(true)
-        .open(logs_dir.join("latest.log"))
+        .open(&log_path)
         .map_err(|e| e.to_string())?;
     let log_file2 = log_file.try_clone().map_err(|e| e.to_string())?;
 
@@ -435,13 +436,26 @@ pub async fn launch_game(app: tauri::AppHandle, config: LaunchConfig) -> Result<
 
     let mut child = cmd.spawn().map_err(|e| format!("Failed to launch java: {}", e))?;
 
-    // Track play time: wait for the process in a background thread and emit game-exited
     let instance_id = config.instance_id.clone();
     let app2 = app.clone();
+    let window = app.get_webview_window("main");
+
     tokio::task::spawn_blocking(move || {
-        let start = std::time::Instant::now();
+        let launch_time = std::time::Instant::now();
+
+        // Tail the game log until Minecraft signals it is past the Mojang
+        // screen, then focus its window and hide the launcher.  This is
+        // compositor-agnostic and event-driven — no polling or fixed delays.
+        if wait_for_game_ready(&log_path, 120) {
+            let _ = std::process::Command::new("swaymsg")
+                .args(["[title=\"Minecraft*\"] focus"])
+                .output();
+        }
+        if let Some(ref w) = window { let _ = w.hide(); }
+
         let _ = child.wait();
-        let elapsed_secs = start.elapsed().as_secs();
+        let elapsed_secs = launch_time.elapsed().as_secs();
+        if let Some(w) = window { let _ = w.show(); }
         let _ = app2.emit("game-exited", serde_json::json!({
             "instanceId": instance_id,
             "elapsedSecs": elapsed_secs,
@@ -872,6 +886,60 @@ fn detect_java_major(java_bin: &str) -> u32 {
         return parts.get(1).and_then(|s| s.splitn(2, '.').next()).and_then(|s| s.parse().ok()).unwrap_or(8);
     }
     major
+}
+
+fn write_options_fullscreen(game_dir: &Path) {
+    let path = game_dir.join("options.txt");
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+
+    let mut lines: Vec<String> = existing
+        .lines()
+        .filter(|l| !l.starts_with("fullscreen:"))
+        .map(String::from)
+        .collect();
+    lines.push("fullscreen:true".into());
+
+    let _ = std::fs::write(&path, lines.join("\n") + "\n");
+}
+
+/// Tail `log_path` until Minecraft logs that it is past the Mojang screen,
+/// or `timeout_secs` elapses. Returns true when the signal is found.
+///
+/// "Reloading ResourceManager" is the primary signal — it appears on the
+/// Render thread after OpenGL and LWJGL are fully initialised, meaning the
+/// window is composited and the game is actively rendering.
+/// "Setting user:" is a reliable early fallback (render thread just started).
+fn wait_for_game_ready(log_path: &std::path::Path, timeout_secs: u64) -> bool {
+    use std::io::{BufRead, BufReader, Seek, SeekFrom};
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+
+    // The log file is created by the launcher before spawn, so it exists
+    // immediately.  Open a separate read handle.
+    let Ok(file) = std::fs::File::open(log_path) else { return false; };
+    let mut reader = BufReader::new(file);
+    // Start at the beginning of the freshly-truncated file.
+    let _ = reader.seek(SeekFrom::Start(0));
+
+    let mut line = String::new();
+    while std::time::Instant::now() < deadline {
+        line.clear();
+        match reader.read_line(&mut line) {
+            Ok(0) => {
+                // Nothing new yet — yield and retry.
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Ok(_) => {
+                if line.contains("Reloading ResourceManager")
+                    || line.contains("Setting user:")
+                {
+                    return true;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    false
 }
 
 fn process_args(args: &[serde_json::Value], tokens: &HashMap<String, String>) -> Vec<String> {

@@ -51,13 +51,16 @@ function axisToDirection(x: number, y: number): GamepadInput | null {
 export function useGamepad(
   onInput: (input: GamepadInput) => void,
   onRelease?: (input: GamepadInput) => void,
+  onRightStick?: (ry: number) => void,
 ) {
-  const onInputRef   = useRef(onInput);
-  const onReleaseRef = useRef(onRelease);
+  const onInputRef      = useRef(onInput);
+  const onReleaseRef    = useRef(onRelease);
+  const onRightStickRef = useRef(onRightStick);
   const rafRef = useRef<number>(0);
 
   useEffect(() => { onInputRef.current = onInput; }, [onInput]);
   useEffect(() => { onReleaseRef.current = onRelease; }, [onRelease]);
+  useEffect(() => { onRightStickRef.current = onRightStick; }, [onRightStick]);
 
   useEffect(() => {
     if (isTauri()) {
@@ -71,6 +74,19 @@ export function useGamepad(
       const axisHeld: { v: GamepadInput | null } = { v: null };
       const axisHoldTimeout: { v: ReturnType<typeof setTimeout> | null } = { v: null };
       const axisHoldInterval: { v: ReturnType<typeof setInterval> | null } = { v: null };
+
+      // Right stick — tracked for continuous scroll via rAF
+      const rightY = { v: 0 };
+      const RIGHT_DEADZONE = 0.15;
+      let scrollRafId = 0;
+      const scrollLoop = () => {
+        if (!isActive) return;
+        if (Math.abs(rightY.v) > RIGHT_DEADZONE) {
+          onRightStickRef.current?.(rightY.v);
+        }
+        scrollRafId = requestAnimationFrame(scrollLoop);
+      };
+      scrollRafId = requestAnimationFrame(scrollLoop);
 
       const clearHold = () => {
         if (holdTimeout.v) { clearTimeout(holdTimeout.v); holdTimeout.v = null; }
@@ -170,6 +186,7 @@ export function useGamepad(
 
             if (axisName === 'LeftStickX' || axisName === 'LeftX') axisState.x = value;
             else if (axisName === 'LeftStickY' || axisName === 'LeftY') axisState.y = -value;
+            else if (axisName === 'RightStickY' || axisName === 'RightY') { rightY.v = value; return; }
             else return;
 
             const direction = axisToDirection(axisState.x, axisState.y);
@@ -190,6 +207,7 @@ export function useGamepad(
         isActive = false;
         clearHold();
         clearAxisHold();
+        cancelAnimationFrame(scrollRafId);
       };
     }
 
@@ -206,6 +224,10 @@ export function useGamepad(
 
       if (gp) {
         let input: GamepadInput | null = null;
+
+        // Right stick — continuous scroll
+        const rightStickY = gp.axes[3] ?? 0;
+        if (Math.abs(rightStickY) > 0.15) onRightStickRef.current?.(rightStickY);
 
         // Left stick + D-pad, prioritised by strongest axis
         const stickDir = axisToDirection(gp.axes[0] ?? 0, gp.axes[1] ?? 0);

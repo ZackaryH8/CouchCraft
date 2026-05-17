@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import type { RefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { GamepadInput } from "./useGamepad";
 
@@ -10,7 +11,9 @@ export interface LogsTabState {
   crashReport: string | null;
   showCrash: boolean;
   isLoading: boolean;
+  scrollRef: RefObject<HTMLDivElement | null>;
   handleInput: (input: GamepadInput) => boolean;
+  scrollBy: (delta: number) => void;
   onSetFilter: (f: LogFilter) => void;
   onDismissCrash: () => void;
 }
@@ -21,6 +24,10 @@ export function useLogsTab(instanceId: string | null, isActive: boolean): LogsTa
   const [crashReport, setCrash]     = useState<string | null>(null);
   const [showCrash, setShowCrash]   = useState(false);
   const [isLoading, setIsLoading]   = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollBy  = useCallback((delta: number) => {
+    scrollRef.current?.scrollBy({ top: delta, behavior: "instant" as ScrollBehavior });
+  }, []);
 
   useEffect(() => {
     if (!instanceId || !isActive) return;
@@ -60,6 +67,7 @@ export function useLogsTab(instanceId: string | null, isActive: boolean): LogsTa
 
   return {
     rawLog, filter, crashReport, showCrash, isLoading,
+    scrollRef, scrollBy,
     handleInput,
     onSetFilter: setFilter,
     onDismissCrash: () => setShowCrash(false),
