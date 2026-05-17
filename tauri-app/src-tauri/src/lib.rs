@@ -203,8 +203,11 @@ pub fn run() {
                 );",
             kind: MigrationKind::Up,
         },
+        // Versions 4 and 5 were used by old migration names in early deployments.
+        // create_content is at v6 and create_java_runtimes at v7 so they run
+        // on databases that already have v4/v5 applied with different content.
         Migration {
-            version: 4,
+            version: 6,
             description: "create_content",
             sql: "CREATE TABLE IF NOT EXISTS content (
                     id TEXT PRIMARY KEY,
@@ -225,7 +228,7 @@ pub fn run() {
             kind: MigrationKind::Up,
         },
         Migration {
-            version: 5,
+            version: 7,
             description: "create_java_runtimes",
             sql: "CREATE TABLE IF NOT EXISTS java_runtimes (
                     version INTEGER PRIMARY KEY,

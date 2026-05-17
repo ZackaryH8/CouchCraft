@@ -2,9 +2,12 @@ import Database from "@tauri-apps/plugin-sql";
 import type { ContentCategory, ContentItem, ContentSource, GameInstance, JavaRuntime, JavaVersion, LoaderType } from "../types";
 
 let _db: Database | null = null;
+let _dbPromise: Promise<Database> | null = null;
 
 async function getDb(): Promise<Database> {
-  if (!_db) _db = await Database.load("sqlite:couchcraft.db");
+  if (_db) return _db;
+  if (!_dbPromise) _dbPromise = Database.load("sqlite:couchcraft.db");
+  _db = await _dbPromise;
   return _db;
 }
 
