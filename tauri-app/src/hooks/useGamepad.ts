@@ -11,22 +11,16 @@ const REPEAT_INTERVAL = 120;
 const DIRECTIONAL: ReadonlySet<GamepadInput> = new Set(['UP', 'DOWN', 'LEFT', 'RIGHT', 'LB', 'RB']);
 
 type PluginButtonName =
-  | 'DPadUp' | 'DPadDown' | 'DPadLeft' | 'DPadRight'
   | 'South' | 'East' | 'North' | 'West'
+  | 'C' | 'Z'
   | 'LeftTrigger' | 'RightTrigger'
   | 'LeftTrigger2' | 'RightTrigger2'
-  | 'LeftThumb'
-  | 'Start';
+  | 'Select' | 'Start' | 'Mode'
+  | 'LeftThumb' | 'RightThumb'
+  | 'DPadUp' | 'DPadDown' | 'DPadLeft' | 'DPadRight'
+  | 'Unknown';
 
-type PluginGamepadEvent =
-  | { ButtonPressed: [PluginButtonName, unknown] }
-  | { ButtonReleased: [PluginButtonName, unknown] }
-  | { ButtonChanged: [PluginButtonName, number, unknown] }
-  | { AxisChanged: [string, number, unknown] };
-
-type PluginGamepadPayload = { event: unknown };
-
-const PLUGIN_BUTTON_TO_INPUT: Record<PluginButtonName, GamepadInput> = {
+const PLUGIN_BUTTON_TO_INPUT: Partial<Record<PluginButtonName, GamepadInput>> = {
   DPadUp: 'UP',    DPadDown: 'DOWN',  DPadLeft: 'LEFT', DPadRight: 'RIGHT',
   South: 'A',      East: 'B',         North: 'Y',       West: 'X',
   LeftTrigger: 'LB',  RightTrigger: 'RB',
@@ -107,16 +101,17 @@ export function useGamepad(
         }, INITIAL_DELAY);
       };
 
-      void import('tauri-plugin-gamepad-api').then(async ({ execute, setLogging }) => {
+      let unsubButton: (() => void) | null = null;
+      let unsubAxis: (() => void) | null = null;
+      let pluginStop: (() => Promise<void>) | null = null;
+
+      void import('tauri-plugin-gamepad-api').then(async ({ start, stop, onButtonChanged, onAxisChanged, setLogging }) => {
         if (!isActive) return;
         await setLogging(false);
 
-        // Per-button timestamp of last fired input. ButtonPressed and
-        // ButtonChanged both fire for the same physical press; whichever
-        // arrives first fires the input — the other is dropped because it
-        // arrives within a few ms (well inside the 80ms debounce window).
-        // Using time rather than a boolean set avoids false-blocks when
-        // analog D-pads oscillate around the 0.5 threshold mid-press.
+        // Per-button timestamp of last fired input. ButtonChanged fires
+        // continuously for analog buttons; the debounce ensures we fire once
+        // per physical press rather than on every value update above threshold.
         const DEBOUNCE_MS = 80;
         const lastFiredAt = new Map<PluginButtonName, number>();
 
@@ -139,69 +134,54 @@ export function useGamepad(
           if (input) onReleaseRef.current?.(input);
         };
 
-        await execute((payload: PluginGamepadPayload) => {
+        unsubButton = onButtonChanged((e) => {
           if (!isActive) return;
-          if (typeof payload.event === 'string' || !payload.event || typeof payload.event !== 'object') return;
+          const buttonName = e.button as PluginButtonName;
+          const input = PLUGIN_BUTTON_TO_INPUT[buttonName];
 
-          const event = payload.event as PluginGamepadEvent;
-
-          if ('ButtonPressed' in event) {
-            const [buttonName] = event.ButtonPressed;
-            const input = PLUGIN_BUTTON_TO_INPUT[buttonName];
+          if (e.pressed && e.value > 0.5) {
             if (!input) return;
             const fired = tryFire(buttonName, input);
             if (fired && DIRECTIONAL.has(input)) {
               startRepeat(input, clearHold, holdTimeout, holdInterval);
             } else if (!fired && DIRECTIONAL.has(input) && !holdTimeout.v && !holdInterval.v) {
-              // ButtonChanged already fired first but didn't start repeat yet
               startRepeat(input, clearHold, holdTimeout, holdInterval);
             }
-            return;
+          } else if (!e.pressed) {
+            releaseButton(buttonName);
           }
+        });
 
-          if ('ButtonReleased' in event) {
-            releaseButton(event.ButtonReleased[0]);
-            return;
-          }
+        unsubAxis = onAxisChanged((e) => {
+          if (!isActive) return;
+          const { axis, value } = e;
 
-          if ('ButtonChanged' in event) {
-            const [buttonName, value] = event.ButtonChanged;
-            if (value > 0.5) {
-              const input = PLUGIN_BUTTON_TO_INPUT[buttonName];
-              if (input) {
-                const fired = tryFire(buttonName, input);
-                if (fired && DIRECTIONAL.has(input) && !holdTimeout.v && !holdInterval.v) {
-                  startRepeat(input, clearHold, holdTimeout, holdInterval);
-                }
-              }
-            } else if (value < 0.1) {
-              // Hysteresis: only treat near-zero as release to avoid false
-              // triggers from analog jitter around the 0.5 threshold.
-              releaseButton(buttonName);
-            }
-            return;
-          }
+          if (axis === 'LeftStickX') axisState.x = value;
+          else if (axis === 'LeftStickY') axisState.y = -value;
+          else if (axis === 'RightStickY') { rightY.v = -value; return; }
+          else if (axis === 'RightZ') { rightY.v = value; return; }
+          else return;
 
-          if ('AxisChanged' in event) {
-            const [axisName, value] = event.AxisChanged;
+          const direction = axisToDirection(axisState.x, axisState.y);
 
-            if (axisName === 'LeftStickX' || axisName === 'LeftX') axisState.x = value;
-            else if (axisName === 'LeftStickY' || axisName === 'LeftY') axisState.y = -value;
-            else if (axisName === 'RightStickY' || axisName === 'RightY') { rightY.v = -value; return; }
-            else return;
-
-            const direction = axisToDirection(axisState.x, axisState.y);
-
-            if (direction !== axisHeld.v) {
-              clearAxisHold();
-              axisHeld.v = direction;
-              if (direction) {
-                onInputRef.current(direction);
-                startRepeat(direction, clearAxisHold, axisHoldTimeout, axisHoldInterval);
-              }
+          if (direction !== axisHeld.v) {
+            clearAxisHold();
+            axisHeld.v = direction;
+            if (direction) {
+              onInputRef.current(direction);
+              startRepeat(direction, clearAxisHold, axisHoldTimeout, axisHoldInterval);
             }
           }
         });
+
+        pluginStop = stop;
+        await start();
+
+        if (!isActive) {
+          unsubButton?.();
+          unsubAxis?.();
+          void stop();
+        }
       });
 
       return () => {
@@ -209,6 +189,9 @@ export function useGamepad(
         clearHold();
         clearAxisHold();
         cancelAnimationFrame(scrollRafId);
+        unsubButton?.();
+        unsubAxis?.();
+        if (pluginStop) void pluginStop();
       };
     }
 
