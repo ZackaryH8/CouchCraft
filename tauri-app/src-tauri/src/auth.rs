@@ -320,8 +320,12 @@ async fn run_mc_auth_chain(
         .await
         .map_err(|e| e.to_string())?;
 
-    let profile: McProfileResponse = serde_json::from_str(&profile_body)
-        .map_err(|e| format!("MC profile — unexpected response: {} — body: {}", e, profile_body))?;
+    let profile: McProfileResponse = serde_json::from_str(&profile_body).map_err(|e| {
+        format!(
+            "MC profile — unexpected response: {} — body: {}",
+            e, profile_body
+        )
+    })?;
 
     Ok(AuthAccount {
         ms_refresh_token,

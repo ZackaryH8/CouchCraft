@@ -1,8 +1,8 @@
+use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
+use std::io::Read;
 use std::path::PathBuf;
 use tauri::Manager;
-use flate2::read::GzDecoder;
-use std::io::Read;
 
 #[derive(Deserialize)]
 struct ServersDat {
@@ -25,8 +25,12 @@ pub struct ServerInfo {
 }
 
 fn mc_root(app: &tauri::AppHandle, instance_id: &str) -> PathBuf {
-    app.path().app_data_dir().unwrap_or_default()
-        .join("instances").join(instance_id).join(".minecraft")
+    app.path()
+        .app_data_dir()
+        .unwrap_or_default()
+        .join("instances")
+        .join(instance_id)
+        .join(".minecraft")
 }
 
 fn try_parse(bytes: &[u8]) -> Option<ServersDat> {
@@ -34,9 +38,14 @@ fn try_parse(bytes: &[u8]) -> Option<ServersDat> {
 }
 
 #[tauri::command]
-pub async fn list_servers(app: tauri::AppHandle, instance_id: String) -> Result<Vec<ServerInfo>, String> {
+pub async fn list_servers(
+    app: tauri::AppHandle,
+    instance_id: String,
+) -> Result<Vec<ServerInfo>, String> {
     let dat_path = mc_root(&app, &instance_id).join("servers.dat");
-    if !dat_path.exists() { return Ok(vec![]); }
+    if !dat_path.exists() {
+        return Ok(vec![]);
+    }
 
     let bytes = std::fs::read(&dat_path).map_err(|e| e.to_string())?;
 
@@ -48,10 +57,21 @@ pub async fn list_servers(app: tauri::AppHandle, instance_id: String) -> Result<
         try_parse(&buf)
     });
 
-    let Some(dat) = parsed else { return Ok(vec![]); };
-    let servers = dat.servers.unwrap_or_default().into_iter().filter_map(|s| {
-        Some(ServerInfo { name: s.name?, ip: s.ip?, icon: s.icon })
-    }).collect();
+    let Some(dat) = parsed else {
+        return Ok(vec![]);
+    };
+    let servers = dat
+        .servers
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|s| {
+            Some(ServerInfo {
+                name: s.name?,
+                ip: s.ip?,
+                icon: s.icon,
+            })
+        })
+        .collect();
 
     Ok(servers)
 }

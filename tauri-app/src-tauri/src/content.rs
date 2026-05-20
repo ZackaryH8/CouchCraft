@@ -82,11 +82,11 @@ fn modrinth_client() -> Result<reqwest::Client, String> {
 
 fn content_subdir(category: &str) -> Result<&'static str, String> {
     match category {
-        "mod"          => Ok("mods"),
+        "mod" => Ok("mods"),
         "resourcepack" => Ok("resourcepacks"),
-        "datapack"     => Ok("datapacks"),
-        "shader"       => Ok("shaderpacks"),
-        other          => Err(format!("Unknown content category: {other}")),
+        "datapack" => Ok("datapacks"),
+        "shader" => Ok("shaderpacks"),
+        other => Err(format!("Unknown content category: {other}")),
     }
 }
 
@@ -100,8 +100,8 @@ fn best_version(mut versions: Vec<MrVersion>) -> Option<MrVersion> {
     // Prefer release > beta > alpha; Modrinth returns newest first within each type.
     let rank = |v: &MrVersion| match v.version_type.as_str() {
         "release" => 0u8,
-        "beta"    => 1,
-        _         => 2,
+        "beta" => 1,
+        _ => 2,
     };
     versions.sort_by_key(rank);
     versions.into_iter().next()
@@ -119,9 +119,7 @@ pub async fn search_modrinth(
 ) -> Result<Vec<ModrinthHit>, String> {
     let client = modrinth_client()?;
 
-    let mut facet_groups: Vec<String> = vec![
-        format!(r#"["project_type:{}"]"#, project_type),
-    ];
+    let mut facet_groups: Vec<String> = vec![format!(r#"["project_type:{}"]"#, project_type)];
     if !mc_version.is_empty() {
         facet_groups.push(format!(r#"["versions:{}"]"#, mc_version));
     }
@@ -133,9 +131,9 @@ pub async fn search_modrinth(
     let resp = client
         .get("https://api.modrinth.com/v2/search")
         .query(&[
-            ("query",  query.as_str()),
+            ("query", query.as_str()),
             ("facets", facets.as_str()),
-            ("limit",  "20"),
+            ("limit", "20"),
             ("offset", &offset.to_string()),
         ])
         .send()
@@ -145,17 +143,21 @@ pub async fn search_modrinth(
         .await
         .map_err(|e| format!("Modrinth parse error: {e}"))?;
 
-    Ok(resp.hits.into_iter().map(|h| ModrinthHit {
-        project_id:  h.project_id,
-        slug:        h.slug,
-        title:       h.title,
-        description: h.description,
-        icon_url:    h.icon_url,
-        downloads:   h.downloads,
-        follows:     h.follows,
-        categories:  h.categories,
-        versions:    h.versions,
-    }).collect())
+    Ok(resp
+        .hits
+        .into_iter()
+        .map(|h| ModrinthHit {
+            project_id: h.project_id,
+            slug: h.slug,
+            title: h.title,
+            description: h.description,
+            icon_url: h.icon_url,
+            downloads: h.downloads,
+            follows: h.follows,
+            categories: h.categories,
+            versions: h.versions,
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -171,12 +173,16 @@ pub async fn get_modrinth_best_version(
     let add_loader = uses_loader_facet(&project_type) && !loader.is_empty() && loader != "vanilla";
 
     // Build query params for the filtered request.
-    let gv_json  = format!(r#"["{}"]"#, mc_version);
+    let gv_json = format!(r#"["{}"]"#, mc_version);
     let ldr_json = format!(r#"["{}"]"#, loader);
 
     let mut params: Vec<(&str, &str)> = vec![];
-    if !mc_version.is_empty() { params.push(("game_versions", &gv_json)); }
-    if add_loader             { params.push(("loaders",       &ldr_json)); }
+    if !mc_version.is_empty() {
+        params.push(("game_versions", &gv_json));
+    }
+    if add_loader {
+        params.push(("loaders", &ldr_json));
+    }
 
     let versions: Vec<MrVersion> = client
         .get(&url)
@@ -210,21 +216,25 @@ pub async fn get_modrinth_best_version(
 
     let version = match best_version(versions) {
         Some(v) => v,
-        None    => return Ok(None),
+        None => return Ok(None),
     };
 
-    let file = version.files.iter().find(|f| f.primary).or_else(|| version.files.first());
+    let file = version
+        .files
+        .iter()
+        .find(|f| f.primary)
+        .or_else(|| version.files.first());
 
     Ok(file.map(|f| ModrinthVersionFile {
-        version_id:     version.id.clone(),
-        version_name:   version.name.clone(),
+        version_id: version.id.clone(),
+        version_name: version.name.clone(),
         version_number: version.version_number.clone(),
-        url:            f.url.clone(),
-        filename:       f.filename.clone(),
-        size_bytes:     f.size,
-        loaders:        version.loaders.clone(),
-        game_versions:  version.game_versions.clone(),
-        version_type:   version.version_type.clone(),
+        url: f.url.clone(),
+        filename: f.filename.clone(),
+        size_bytes: f.size,
+        loaders: version.loaders.clone(),
+        game_versions: version.game_versions.clone(),
+        version_type: version.version_type.clone(),
     }))
 }
 
@@ -236,7 +246,7 @@ pub async fn download_content(
     filename: String,
     category: String,
 ) -> Result<(), String> {
-    let subdir  = content_subdir(&category)?;
+    let subdir = content_subdir(&category)?;
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let dest = data_dir
         .join("instances")
@@ -267,7 +277,7 @@ pub async fn set_content_enabled(
     category: String,
     enabled: bool,
 ) -> Result<(), String> {
-    let subdir   = content_subdir(&category)?;
+    let subdir = content_subdir(&category)?;
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let dir = data_dir
         .join("instances")
@@ -275,17 +285,15 @@ pub async fn set_content_enabled(
         .join(".minecraft")
         .join(subdir);
 
-    let active   = dir.join(&filename);
+    let active = dir.join(&filename);
     let disabled = dir.join(format!("{}.disabled", filename));
 
     if enabled {
         if disabled.exists() {
-            std::fs::rename(&disabled, &active)
-                .map_err(|e| format!("Enable error: {e}"))?;
+            std::fs::rename(&disabled, &active).map_err(|e| format!("Enable error: {e}"))?;
         }
     } else if active.exists() {
-        std::fs::rename(&active, &disabled)
-            .map_err(|e| format!("Disable error: {e}"))?;
+        std::fs::rename(&active, &disabled).map_err(|e| format!("Disable error: {e}"))?;
     }
     Ok(())
 }
@@ -297,7 +305,7 @@ pub async fn delete_content_file(
     filename: String,
     category: String,
 ) -> Result<(), String> {
-    let subdir   = content_subdir(&category)?;
+    let subdir = content_subdir(&category)?;
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let dir = data_dir
         .join("instances")
@@ -305,7 +313,7 @@ pub async fn delete_content_file(
         .join(".minecraft")
         .join(subdir);
 
-    let active   = dir.join(&filename);
+    let active = dir.join(&filename);
     let disabled = dir.join(format!("{}.disabled", filename));
 
     if active.exists() {

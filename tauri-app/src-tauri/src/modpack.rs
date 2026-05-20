@@ -106,7 +106,9 @@ fn modrinth_client() -> Result<Client, String> {
 }
 
 fn primary_file(files: &[MrFile]) -> Option<&MrFile> {
-    files.iter().find(|f| f.primary)
+    files
+        .iter()
+        .find(|f| f.primary)
         .or_else(|| files.iter().find(|f| f.filename.ends_with(".mrpack")))
         .or_else(|| files.first())
 }
@@ -117,7 +119,9 @@ fn parse_modrinth_ids(url: &str) -> (Option<String>, Option<String>) {
     let parts: Vec<&str> = url.split('/').collect();
     if let Some(data_pos) = parts.iter().position(|&s| s == "data") {
         let project_id = parts.get(data_pos + 1).map(|s| s.to_string());
-        let version_id = parts.iter().position(|&s| s == "versions")
+        let version_id = parts
+            .iter()
+            .position(|&s| s == "versions")
             .and_then(|p| parts.get(p + 1))
             .map(|s| s.to_string());
         return (project_id, version_id);
@@ -129,9 +133,9 @@ fn loader_from_deps(deps: &std::collections::HashMap<String, String>) -> (String
     for (key, ver) in deps {
         let loader = match key.as_str() {
             "fabric-loader" => "fabric",
-            "quilt-loader"  => "quilt",
-            "neoforge"      => "neoforge",
-            "forge"         => "forge",
+            "quilt-loader" => "quilt",
+            "neoforge" => "neoforge",
+            "forge" => "forge",
             _ => continue,
         };
         return (loader.to_string(), ver.clone());
@@ -146,18 +150,21 @@ async fn process_mrpack_zip(
     pack_bytes: Vec<u8>,
     icon_data: Option<String>,
 ) -> Result<MrpackInstallResult, String> {
-    let base    = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let mc_dir  = base.join("instances").join(instance_id).join(".minecraft");
-    let client  = modrinth_client()?;
+    let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mc_dir = base.join("instances").join(instance_id).join(".minecraft");
+    let client = modrinth_client()?;
 
     macro_rules! emit {
         ($stage:expr, $msg:expr, $done:expr, $total:expr) => {
-            let _ = app.emit("prepare-progress", PrepareProgress {
-                stage:   $stage.to_string(),
-                message: $msg.to_string(),
-                done:    $done,
-                total:   $total,
-            });
+            let _ = app.emit(
+                "prepare-progress",
+                PrepareProgress {
+                    stage: $stage.to_string(),
+                    message: $msg.to_string(),
+                    done: $done,
+                    total: $total,
+                },
+            );
         };
     }
 
@@ -165,7 +172,8 @@ async fn process_mrpack_zip(
     let mut zip = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
 
     let manifest: MrpackManifest = {
-        let mut entry = zip.by_name("modrinth.index.json")
+        let mut entry = zip
+            .by_name("modrinth.index.json")
             .map_err(|_| "modrinth.index.json not found in pack")?;
         let mut buf = Vec::new();
         entry.read_to_end(&mut buf).map_err(|e| e.to_string())?;
@@ -176,23 +184,39 @@ async fn process_mrpack_zip(
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).map_err(|e| e.to_string())?;
         let name = entry.name().to_string();
-        let rel = if let Some(r) = name.strip_prefix("overrides/") { r.to_string() }
-                  else if let Some(r) = name.strip_prefix("client-overrides/") { r.to_string() }
-                  else { continue };
-        if rel.is_empty() || rel.ends_with('/') { continue; }
+        let rel = if let Some(r) = name.strip_prefix("overrides/") {
+            r.to_string()
+        } else if let Some(r) = name.strip_prefix("client-overrides/") {
+            r.to_string()
+        } else {
+            continue;
+        };
+        if rel.is_empty() || rel.ends_with('/') {
+            continue;
+        }
         let dest = mc_dir.join(&rel);
-        if let Some(p) = dest.parent() { std::fs::create_dir_all(p).map_err(|e| e.to_string())?; }
+        if let Some(p) = dest.parent() {
+            std::fs::create_dir_all(p).map_err(|e| e.to_string())?;
+        }
         let mut out = std::fs::File::create(&dest).map_err(|e| e.to_string())?;
         std::io::copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
     }
     emit!("overrides", "Overrides extracted", 1, 1);
 
-    let client_files: Vec<_> = manifest.files.iter()
-        .filter(|f| f.env.as_ref().map(|e| e.client != "unsupported").unwrap_or(true))
+    let client_files: Vec<_> = manifest
+        .files
+        .iter()
+        .filter(|f| {
+            f.env
+                .as_ref()
+                .map(|e| e.client != "unsupported")
+                .unwrap_or(true)
+        })
         .filter(|f| !f.downloads.is_empty())
         .collect::<Vec<_>>();
 
-    let installed_mods: Vec<InstalledMod> = client_files.iter()
+    let installed_mods: Vec<InstalledMod> = client_files
+        .iter()
         .filter(|f| f.path.starts_with("mods/"))
         .map(|f| {
             let filename = std::path::Path::new(&f.path)
@@ -200,17 +224,24 @@ async fn process_mrpack_zip(
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_else(|| f.path.clone());
             let (project_id, version_id) = parse_modrinth_ids(&f.downloads[0]);
-            InstalledMod { filename, modrinth_project_id: project_id, modrinth_version_id: version_id }
+            InstalledMod {
+                filename,
+                modrinth_project_id: project_id,
+                modrinth_version_id: version_id,
+            }
         })
         .collect();
 
-    let files: Vec<_> = client_files.into_iter()
-        .map(|f| (
-            mc_dir.join(&f.path),
-            f.downloads[0].clone(),
-            f.hashes.sha1.clone(),
-            f.file_size,
-        ))
+    let files: Vec<_> = client_files
+        .into_iter()
+        .map(|f| {
+            (
+                mc_dir.join(&f.path),
+                f.downloads[0].clone(),
+                f.hashes.sha1.clone(),
+                f.file_size,
+            )
+        })
         .collect();
 
     let total_files = files.len() as u32;
@@ -220,9 +251,9 @@ async fn process_mrpack_zip(
     let mut handles = Vec::new();
 
     for (i, (dest_path, url, sha1, _size)) in files.into_iter().enumerate() {
-        let client2  = client.clone();
-        let sem2     = sem.clone();
-        let app2     = app.clone();
+        let client2 = client.clone();
+        let sem2 = sem.clone();
+        let app2 = app.clone();
 
         handles.push(tokio::spawn(async move {
             let _permit = sem2.acquire().await.unwrap();
@@ -230,12 +261,15 @@ async fn process_mrpack_zip(
             if dest_path.exists() {
                 if let Some(ref h) = sha1 {
                     if sha1_ok(&dest_path, h) {
-                        let _ = app2.emit("prepare-progress", PrepareProgress {
-                            stage: "mods".into(),
-                            message: format!("Mods ({}/{})", i + 1, total_files),
-                            done: (i + 1) as u32,
-                            total: total_files,
-                        });
+                        let _ = app2.emit(
+                            "prepare-progress",
+                            PrepareProgress {
+                                stage: "mods".into(),
+                                message: format!("Mods ({}/{})", i + 1, total_files),
+                                done: (i + 1) as u32,
+                                total: total_files,
+                            },
+                        );
                         return Ok::<(), String>(());
                     }
                 }
@@ -243,19 +277,28 @@ async fn process_mrpack_zip(
 
             download_checked(&client2, &url, &dest_path, sha1.as_deref()).await?;
 
-            let _ = app2.emit("prepare-progress", PrepareProgress {
-                stage: "mods".into(),
-                message: format!("Mods ({}/{})", i + 1, total_files),
-                done: (i + 1) as u32,
-                total: total_files,
-            });
+            let _ = app2.emit(
+                "prepare-progress",
+                PrepareProgress {
+                    stage: "mods".into(),
+                    message: format!("Mods ({}/{})", i + 1, total_files),
+                    done: (i + 1) as u32,
+                    total: total_files,
+                },
+            );
             Ok(())
         }));
     }
 
-    for h in handles { h.await.map_err(|e| e.to_string())??; }
+    for h in handles {
+        h.await.map_err(|e| e.to_string())??;
+    }
 
-    let mc_version = manifest.dependencies.get("minecraft").cloned().unwrap_or_default();
+    let mc_version = manifest
+        .dependencies
+        .get("minecraft")
+        .cloned()
+        .unwrap_or_default();
     let (loader_type, loader_version) = loader_from_deps(&manifest.dependencies);
 
     emit!("done", "Installation complete!", 1, 1);
@@ -279,25 +322,37 @@ pub async fn list_modpack_versions(project_id: String) -> Result<Vec<ModpackVers
 
     let versions: Vec<MrVersion> = client
         .get(&url)
-        .send().await.map_err(|e| format!("Fetch error: {e}"))?
-        .json().await.map_err(|e| format!("Parse error: {e}"))?;
+        .send()
+        .await
+        .map_err(|e| format!("Fetch error: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Parse error: {e}"))?;
 
-    let out = versions.into_iter().filter_map(|v| {
-        let file = primary_file(&v.files)?;
-        let loader = v.loaders.first()
-            .map(|s| s.as_str())
-            .and_then(|s| match s { "fabric"|"quilt"|"forge"|"neoforge"|"vanilla" => Some(s), _ => None })
-            .unwrap_or("fabric")
-            .to_string();
-        Some(ModpackVersionInfo {
-            version_id:   v.id,
-            version_name: v.name,
-            mc_versions:  v.game_versions,
-            loader_type:  loader,
-            file_url:     file.url.clone(),
-            file_size:    file.size,
+    let out = versions
+        .into_iter()
+        .filter_map(|v| {
+            let file = primary_file(&v.files)?;
+            let loader = v
+                .loaders
+                .first()
+                .map(|s| s.as_str())
+                .and_then(|s| match s {
+                    "fabric" | "quilt" | "forge" | "neoforge" | "vanilla" => Some(s),
+                    _ => None,
+                })
+                .unwrap_or("fabric")
+                .to_string();
+            Some(ModpackVersionInfo {
+                version_id: v.id,
+                version_name: v.name,
+                mc_versions: v.game_versions,
+                loader_type: loader,
+                file_url: file.url.clone(),
+                file_size: file.size,
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(out)
 }
@@ -311,19 +366,33 @@ pub async fn install_mrpack(
 ) -> Result<MrpackInstallResult, String> {
     let client = modrinth_client()?;
 
-    let _ = app.emit("prepare-progress", PrepareProgress {
-        stage: "pack".into(), message: "Fetching pack info…".into(), done: 0, total: 1,
-    });
+    let _ = app.emit(
+        "prepare-progress",
+        PrepareProgress {
+            stage: "pack".into(),
+            message: "Fetching pack info…".into(),
+            done: 0,
+            total: 1,
+        },
+    );
 
-    let ver_url  = format!("https://api.modrinth.com/v2/version/{}", version_id);
-    let version: MrVersion = client.get(&ver_url)
-        .send().await.map_err(|e| e.to_string())?
-        .json().await.map_err(|e| e.to_string())?;
+    let ver_url = format!("https://api.modrinth.com/v2/version/{}", version_id);
+    let version: MrVersion = client
+        .get(&ver_url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
 
-    let pack_file = primary_file(&version.files)
-        .ok_or("No .mrpack file found in version")?;
+    let pack_file = primary_file(&version.files).ok_or("No .mrpack file found in version")?;
 
-    let resp  = client.get(&pack_file.url).send().await.map_err(|e| e.to_string())?;
+    let resp = client
+        .get(&pack_file.url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
     let total = resp.content_length().unwrap_or(0);
     let mut stream = resp.bytes_stream();
     let mut pack_bytes: Vec<u8> = Vec::with_capacity(total as usize);
@@ -332,17 +401,32 @@ pub async fn install_mrpack(
         let chunk = chunk.map_err(|e| e.to_string())?;
         pack_bytes.extend_from_slice(&chunk);
         let done = pack_bytes.len() as u32;
-        let _ = app.emit("prepare-progress", PrepareProgress {
-            stage:   "pack".into(),
-            message: format!("Downloading pack… ({}%)",
-                if total > 0 { pack_bytes.len() as u64 * 100 / total } else { 0 }),
-            done,
-            total: total.max(1) as u32,
-        });
+        let _ = app.emit(
+            "prepare-progress",
+            PrepareProgress {
+                stage: "pack".into(),
+                message: format!(
+                    "Downloading pack… ({}%)",
+                    if total > 0 {
+                        pack_bytes.len() as u64 * 100 / total
+                    } else {
+                        0
+                    }
+                ),
+                done,
+                total: total.max(1) as u32,
+            },
+        );
     }
-    let _ = app.emit("prepare-progress", PrepareProgress {
-        stage: "pack".into(), message: "Pack downloaded".into(), done: 1, total: 1,
-    });
+    let _ = app.emit(
+        "prepare-progress",
+        PrepareProgress {
+            stage: "pack".into(),
+            message: "Pack downloaded".into(),
+            done: 1,
+            total: 1,
+        },
+    );
 
     let icon_data: Option<String> = if let Some(url) = icon_url {
         match client.get(&url).send().await {
@@ -365,14 +449,25 @@ pub async fn install_mrpack_from_file(
     instance_id: String,
     file_path: String,
 ) -> Result<MrpackInstallResult, String> {
-    let _ = app.emit("prepare-progress", PrepareProgress {
-        stage: "pack".into(), message: "Reading pack file…".into(), done: 0, total: 1,
-    });
-    let pack_bytes = std::fs::read(&file_path)
-        .map_err(|e| format!("Cannot read file: {e}"))?;
-    let _ = app.emit("prepare-progress", PrepareProgress {
-        stage: "pack".into(), message: "Pack loaded".into(), done: 1, total: 1,
-    });
+    let _ = app.emit(
+        "prepare-progress",
+        PrepareProgress {
+            stage: "pack".into(),
+            message: "Reading pack file…".into(),
+            done: 0,
+            total: 1,
+        },
+    );
+    let pack_bytes = std::fs::read(&file_path).map_err(|e| format!("Cannot read file: {e}"))?;
+    let _ = app.emit(
+        "prepare-progress",
+        PrepareProgress {
+            stage: "pack".into(),
+            message: "Pack loaded".into(),
+            done: 1,
+            total: 1,
+        },
+    );
     process_mrpack_zip(app, &instance_id, pack_bytes, None).await
 }
 
@@ -387,7 +482,8 @@ pub async fn list_import_files(app: tauri::AppHandle) -> Result<Vec<ImportFile>,
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) == Some("mrpack") {
-            let name = path.file_name()
+            let name = path
+                .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             files.push(ImportFile {

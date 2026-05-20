@@ -1,30 +1,33 @@
 mod auth;
 mod content;
 mod files;
+mod install;
+mod logs;
+mod modpack;
+mod servers;
 mod versions;
 mod worlds;
-mod servers;
-mod logs;
-mod install;
-mod modpack;
-use auth::{start_device_code_flow, poll_device_code, refresh_mc_auth};
-use content::{search_modrinth, get_modrinth_best_version, download_content, set_content_enabled, delete_content_file};
-use files::{list_instance_files, rename_instance_file, delete_instance_path};
-use versions::{fetch_mc_versions, fetch_loader_versions};
-use worlds::list_worlds;
-use servers::list_servers;
-use logs::{read_instance_log, get_latest_crash_report};
-use install::{prepare_instance, launch_game, detect_java_runtimes};
-use modpack::{list_modpack_versions, install_mrpack, install_mrpack_from_file, list_import_files};
-use tauri_plugin_sql::{Migration, MigrationKind};
+use auth::{poll_device_code, refresh_mc_auth, start_device_code_flow};
+use content::{
+    delete_content_file, download_content, get_modrinth_best_version, search_modrinth,
+    set_content_enabled,
+};
+use files::{delete_instance_path, list_instance_files, rename_instance_file};
 use gilrs::{
-    ff::{BaseEffect, BaseEffectType, Effect, EffectBuilder, Replay, Repeat, Ticks},
+    ff::{BaseEffect, BaseEffectType, Effect, EffectBuilder, Repeat, Replay, Ticks},
     Gilrs,
 };
+use install::{detect_java_runtimes, launch_game, prepare_instance};
+use logs::{get_latest_crash_report, read_instance_log};
+use modpack::{install_mrpack, install_mrpack_from_file, list_import_files, list_modpack_versions};
 use serde::{Deserialize, Serialize};
+use servers::list_servers;
 use std::process::Command;
 use std::sync::Mutex;
 use tauri::Manager;
+use tauri_plugin_sql::{Migration, MigrationKind};
+use versions::{fetch_loader_versions, fetch_mc_versions};
+use worlds::list_worlds;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LaunchConfig {
@@ -57,12 +60,17 @@ async fn launch_minecraft(config: LaunchConfig) -> Result<String, String> {
     let _child = Command::new("java")
         .args([
             "-Xmx2G",
-            "-jar", "client.jar", // Placeholder
-            "--username", &config.username,
-            "--uuid", &config.uuid,
-            "--accessToken", &config.access_token,
-            "--gameDir", &format!("./instances/{}", config.instance_id),
-            "--fullscreen"
+            "-jar",
+            "client.jar", // Placeholder
+            "--username",
+            &config.username,
+            "--uuid",
+            &config.uuid,
+            "--accessToken",
+            &config.access_token,
+            "--gameDir",
+            &format!("./instances/{}", config.instance_id),
+            "--fullscreen",
         ])
         .spawn()
         .map_err(|e| e.to_string())?;
@@ -139,13 +147,25 @@ fn quit_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-async fn create_instance_dirs(app: tauri::AppHandle, instance_id: String) -> Result<String, String> {
+async fn create_instance_dirs(
+    app: tauri::AppHandle,
+    instance_id: String,
+) -> Result<String, String> {
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let mc_dir = data_dir.join("instances").join(&instance_id).join(".minecraft");
+    let mc_dir = data_dir
+        .join("instances")
+        .join(&instance_id)
+        .join(".minecraft");
 
     for subdir in &[
-        "mods", "resourcepacks", "shaderpacks", "datapacks",
-        "saves", "logs", "screenshots", "config",
+        "mods",
+        "resourcepacks",
+        "shaderpacks",
+        "datapacks",
+        "saves",
+        "logs",
+        "screenshots",
+        "config",
     ] {
         std::fs::create_dir_all(mc_dir.join(subdir)).map_err(|e| e.to_string())?;
     }
@@ -242,25 +262,33 @@ pub fn run() {
 
     tauri::Builder::default()
         .setup(|app| {
-            let window = app.get_webview_window("main")
+            let window = app
+                .get_webview_window("main")
                 .ok_or("main webview window not found")?;
 
-            let size = window.current_monitor().ok().flatten().map(|m| {
-                let s = m.size();
-                (s.width, s.height)
-            }).or_else(|| {
-                // Fallback: read resolution exported by startup.sh via swaymsg.
-                // current_monitor() returns None on Wayland before window mapping.
-                let res = std::env::var("COUCHCRAFT_RESOLUTION").ok()?;
-                let (w, h) = res.split_once('x')?;
-                Some((w.parse().ok()?, h.parse().ok()?))
-            });
+            let size = window
+                .current_monitor()
+                .ok()
+                .flatten()
+                .map(|m| {
+                    let s = m.size();
+                    (s.width, s.height)
+                })
+                .or_else(|| {
+                    // Fallback: read resolution exported by startup.sh via swaymsg.
+                    // current_monitor() returns None on Wayland before window mapping.
+                    let res = std::env::var("COUCHCRAFT_RESOLUTION").ok()?;
+                    let (w, h) = res.split_once('x')?;
+                    Some((w.parse().ok()?, h.parse().ok()?))
+                });
 
             if let Some((width, height)) = size {
-                let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width, height }));
-                let _ = window.set_position(tauri::Position::Physical(
-                    tauri::PhysicalPosition { x: 0, y: 0 },
-                ));
+                let _ =
+                    window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width, height }));
+                let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                    x: 0,
+                    y: 0,
+                }));
             }
 
             Ok(())

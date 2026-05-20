@@ -18,7 +18,10 @@ pub struct FileEntry {
 /// Returns the `.minecraft/` root for a given instance.
 fn mc_root(app: &tauri::AppHandle, instance_id: &str) -> Result<std::path::PathBuf, String> {
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    Ok(data_dir.join("instances").join(instance_id).join(".minecraft"))
+    Ok(data_dir
+        .join("instances")
+        .join(instance_id)
+        .join(".minecraft"))
 }
 
 /// Validates a subpath is safe (no `..` components) and returns the resolved
@@ -66,17 +69,22 @@ pub async fn list_instance_files(
     instance_id: String,
     subpath: String,
 ) -> Result<Vec<FileEntry>, String> {
-    let base   = mc_root(&app, &instance_id)?;
+    let base = mc_root(&app, &instance_id)?;
     let target = safe_join(&base, &subpath)?;
 
     let mut entries: Vec<FileEntry> = std::fs::read_dir(&target)
         .map_err(|e| format!("Read dir error: {e}"))?
         .filter_map(|e| e.ok())
         .map(|e| {
-            let meta        = e.metadata().ok();
-            let is_dir      = meta.as_ref().map(|m| m.is_dir()).unwrap_or(false);
-            let size_bytes  = if is_dir { 0 } else { meta.as_ref().map(|m| m.len()).unwrap_or(0) };
-            let modified_secs = meta.as_ref()
+            let meta = e.metadata().ok();
+            let is_dir = meta.as_ref().map(|m| m.is_dir()).unwrap_or(false);
+            let size_bytes = if is_dir {
+                0
+            } else {
+                meta.as_ref().map(|m| m.len()).unwrap_or(0)
+            };
+            let modified_secs = meta
+                .as_ref()
                 .and_then(|m| m.modified().ok())
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs());
@@ -115,12 +123,9 @@ pub async fn rename_instance_file(
         return Err("Filename cannot be empty".into());
     }
 
-    let base    = mc_root(&app, &instance_id)?;
-    let old     = safe_join(&base, &subpath)?;
-    let new_path = old
-        .parent()
-        .ok_or("Cannot rename root")?
-        .join(&new_name);
+    let base = mc_root(&app, &instance_id)?;
+    let old = safe_join(&base, &subpath)?;
+    let new_path = old.parent().ok_or("Cannot rename root")?.join(&new_name);
 
     std::fs::rename(&old, &new_path).map_err(|e| format!("Rename error: {e}"))?;
     Ok(())
@@ -133,7 +138,7 @@ pub async fn delete_instance_path(
     instance_id: String,
     subpath: String,
 ) -> Result<(), String> {
-    let base   = mc_root(&app, &instance_id)?;
+    let base = mc_root(&app, &instance_id)?;
     let target = safe_join(&base, &subpath)?;
 
     if target.is_dir() {
